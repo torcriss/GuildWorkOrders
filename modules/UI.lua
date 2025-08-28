@@ -175,6 +175,7 @@ function UI.SelectTab(tabId)
         currentTab = tabId
         Config.SetCurrentTab(tabId)
         UI.UpdateTabAppearance()
+        UI.CreateColumnHeaders()  -- Recreate headers for new tab
         UI.RefreshOrders()
     end
 end
@@ -268,22 +269,55 @@ function UI.CreateOrderList()
     UI.CreateColumnHeaders()
 end
 
+-- Clear existing column headers
+function UI.ClearColumnHeaders()
+    if not mainFrame then return end
+    
+    -- Find and remove existing header labels
+    for i, child in ipairs({mainFrame:GetChildren()}) do
+        if child.isHeaderLabel then
+            child:Hide()
+            child:SetParent(nil)
+        end
+    end
+end
+
 -- Create column headers
 function UI.CreateColumnHeaders()
-    local headers = {
-        {text = "Item", width = 180, x = 10},
-        {text = "Qty", width = 40, x = 200},
-        {text = "Price", width = 60, x = 250},
-        {text = "Buyer", width = 80, x = 320},
-        {text = "Seller", width = 80, x = 410},
-        {text = "Time", width = 50, x = 500},
-        {text = "Action", width = 60, x = 560}
-    }
+    -- Clear existing headers first
+    UI.ClearColumnHeaders()
+    local headers
+    
+    if currentTab == "history" then
+        headers = {
+            {text = "Type", width = 50, x = 10},
+            {text = "Item", width = 160, x = 70},
+            {text = "Qty", width = 40, x = 240},
+            {text = "Price", width = 60, x = 290},
+            {text = "Buyer", width = 70, x = 360},
+            {text = "Seller", width = 70, x = 440},
+            {text = "Time", width = 50, x = 520},
+            {text = "Status", width = 70, x = 580},
+            {text = "Completed", width = 80, x = 660}
+        }
+    else
+        headers = {
+            {text = "Type", width = 50, x = 10},
+            {text = "Item", width = 160, x = 70},
+            {text = "Qty", width = 40, x = 240},
+            {text = "Price", width = 60, x = 290},
+            {text = "Buyer", width = 70, x = 360},
+            {text = "Seller", width = 70, x = 440},
+            {text = "Time", width = 50, x = 520},
+            {text = "Action", width = 60, x = 580}
+        }
+    end
     
     for _, header in ipairs(headers) do
         local label = mainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOPLEFT", header.x, -90)
         label:SetText("|cffFFD700" .. header.text .. "|r")
+        label.isHeaderLabel = true  -- Mark for cleanup
     end
 end
 
@@ -351,14 +385,14 @@ function UI.CreateOrderRow(order, index)
     
     -- Buyer column (who wants to buy)
     local buyer = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    buyer:SetPoint("LEFT", 320, 0)
-    buyer:SetWidth(80)
+    buyer:SetPoint("LEFT", 360, 0)
+    buyer:SetWidth(70)
     buyer:SetJustifyH("LEFT")
     
     -- Seller column (who wants to sell)
     local seller = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    seller:SetPoint("LEFT", 410, 0)
-    seller:SetWidth(80)
+    seller:SetPoint("LEFT", 440, 0)
+    seller:SetWidth(70)
     seller:SetJustifyH("LEFT")
     
     -- Set buyer/seller based on order type
@@ -379,41 +413,62 @@ function UI.CreateOrderRow(order, index)
     
     -- Time ago
     local timeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    timeText:SetPoint("LEFT", 500, 0)
+    timeText:SetPoint("LEFT", 520, 0)
     timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
     
-    -- Action button
-    local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    actionBtn:SetSize(60, 20)
-    actionBtn:SetPoint("LEFT", 560, 0)
-    
-    local playerName = UnitName("player")
-    if order.player == playerName then
-        -- Own order - can cancel
-        if currentTab == "history" then
-            actionBtn:Hide()
+    -- Handle history tab differently
+    if currentTab == "history" then
+        -- Status column for history
+        local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        statusText:SetPoint("LEFT", 580, 0)
+        statusText:SetWidth(70)
+        statusText:SetJustifyH("CENTER")
+        if order.status == Database.STATUS.FULFILLED then
+            statusText:SetText("|cff00ff00Completed|r")
+        elseif order.status == Database.STATUS.CANCELLED then
+            statusText:SetText("|cffff0000Cancelled|r")
         else
+            statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
+        end
+        
+        -- Completion timestamp column for history
+        local completedText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        completedText:SetPoint("LEFT", 660, 0)
+        completedText:SetWidth(80)
+        completedText:SetJustifyH("LEFT")
+        if order.completedAt then
+            completedText:SetText("|cff888888" .. UI.GetTimeAgo(order.completedAt) .. "|r")
+        else
+            completedText:SetText("|cff888888-|r")
+        end
+    else
+        -- Action button for active tabs
+        local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        actionBtn:SetSize(60, 20)
+        actionBtn:SetPoint("LEFT", 580, 0)
+    
+        local playerName = UnitName("player")
+        if order.player == playerName then
+            -- Own order - can cancel
             actionBtn:SetText("Cancel")
             actionBtn:SetScript("OnClick", function()
                 UI.ConfirmCancelOrder(order)
             end)
-        end
-    else
-        -- Others' orders - Buy/Sell actions
-        if currentTab == "history" then
-            actionBtn:Hide()
-        elseif order.type == Database.TYPE.WTB then
-            -- This is a Buy Order (someone wants to buy) - show "Sell" button
-            actionBtn:SetText("Sell")
-            actionBtn:SetScript("OnClick", function()
-                UI.ConfirmSellToOrder(order)
-            end)
-        elseif order.type == Database.TYPE.WTS then
-            -- This is a Sell Order (someone wants to sell) - show "Buy" button
-            actionBtn:SetText("Buy")
-            actionBtn:SetScript("OnClick", function()
-                UI.ConfirmBuyFromOrder(order)
-            end)
+        else
+            -- Others' orders - Buy/Sell actions
+            if order.type == Database.TYPE.WTB then
+                -- This is a Buy Order (someone wants to buy) - show "Sell" button
+                actionBtn:SetText("Sell")
+                actionBtn:SetScript("OnClick", function()
+                    UI.ConfirmSellToOrder(order)
+                end)
+            elseif order.type == Database.TYPE.WTS then
+                -- This is a Sell Order (someone wants to sell) - show "Buy" button
+                actionBtn:SetText("Buy")
+                actionBtn:SetScript("OnClick", function()
+                    UI.ConfirmBuyFromOrder(order)
+                end)
+            end
         end
     end
     
@@ -556,9 +611,16 @@ function UI.UpdateStatusBar()
     end
     UI.syncText:SetText("Last sync: " .. syncText)
     
-    -- Update order count
-    local orders = UI.GetFilteredOrders()
-    UI.countText:SetText("Orders: " .. #orders)
+    -- Update order count (only show active orders, not history)
+    if currentTab == "history" then
+        -- For history tab, show total active orders, not history count
+        local activeOrders = Database.GetAllOrders()  -- This gets active orders only
+        UI.countText:SetText("Active Orders: " .. #activeOrders)
+    else
+        -- For other tabs, show current filtered orders
+        local orders = UI.GetFilteredOrders()
+        UI.countText:SetText("Orders: " .. #orders)
+    end
 end
 
 -- Show online users tooltip
