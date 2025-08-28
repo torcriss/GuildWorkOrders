@@ -11,4 +11,5 @@ modules\Parser.lua
 modules\Sync.lua
 modules\UI.lua
 modules\Commands.lua
+modules\Minimap.lua
 GuildWorkOrders.lua

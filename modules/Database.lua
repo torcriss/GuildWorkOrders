@@ -40,7 +40,27 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     -- Parse item name from link
     local itemName = itemLink
     if string.find(itemLink, "|H") then
-        itemName = string.match(itemLink, "%[(.-)%]") or itemLink
+        -- Extract item name from properly formatted item link
+        itemName = string.match(itemLink, "%[(.-)%]")
+        if not itemName then
+            -- If extraction fails, try to get item name from item ID
+            local itemId = string.match(itemLink, "Hitem:(%d+)")
+            if itemId then
+                itemName = "Item " .. itemId -- Fallback name
+            else
+                itemName = "Unknown Item" -- Complete fallback
+            end
+        end
+    else
+        -- If not a proper item link, try to extract item ID or use as plain text
+        if itemLink and string.find(itemLink, "Hitem:") then
+            local itemId = string.match(itemLink, "Hitem:(%d+)")
+            if itemId then
+                itemName = "Item " .. itemId
+            else
+                itemName = "Unknown Item"
+            end
+        end
     end
     
     -- Convert price to copper for sorting
@@ -78,6 +98,34 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     return order
 end
 
+-- Clean up corrupted item names
+function Database.CleanItemName(order)
+    if not order then return end
+    
+    -- If itemName is missing or looks corrupted, try to fix it
+    if not order.itemName or string.find(order.itemName, "Hitem:") then
+        if order.itemLink then
+            if string.find(order.itemLink, "|H") then
+                -- Proper item link - extract name from brackets
+                order.itemName = string.match(order.itemLink, "%[(.-)%]")
+            end
+            
+            -- If still no name, try to extract from item ID
+            if not order.itemName then
+                local itemId = string.match(order.itemLink, "Hitem:(%d+)")
+                if itemId then
+                    order.itemName = "Item " .. itemId
+                end
+            end
+        end
+        
+        -- Final fallback
+        if not order.itemName then
+            order.itemName = "Unknown Item"
+        end
+    end
+end
+
 -- Get all orders
 function Database.GetAllOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
@@ -88,6 +136,8 @@ function Database.GetAllOrders()
     for id, order in pairs(GuildWorkOrdersDB.orders) do
         -- Only include active orders that haven't expired
         if order.status == Database.STATUS.ACTIVE and order.expiresAt > time() then
+            -- Clean up any corrupted item names
+            Database.CleanItemName(order)
             table.insert(orders, order)
         end
     end
@@ -117,14 +167,28 @@ end
 -- Get player's own orders
 function Database.GetMyOrders()
     local playerName = UnitName("player")
-    local allOrders = Database.GetAllOrders()
     local myOrders = {}
     
+    -- Get active orders
+    local allOrders = Database.GetAllOrders()
     for _, order in ipairs(allOrders) do
         if order.player == playerName then
             table.insert(myOrders, order)
         end
     end
+    
+    -- Get completed/cancelled orders from history
+    local history = Database.GetHistory()
+    for _, order in ipairs(history) do
+        if order.player == playerName then
+            table.insert(myOrders, order)
+        end
+    end
+    
+    -- Sort by timestamp (newest first)
+    table.sort(myOrders, function(a, b)
+        return (a.timestamp or 0) > (b.timestamp or 0)
+    end)
     
     return myOrders
 end
@@ -150,7 +214,7 @@ function Database.SearchOrders(searchText)
 end
 
 -- Update order status
-function Database.UpdateOrderStatus(orderID, newStatus)
+function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
         return false
     end
@@ -160,6 +224,12 @@ function Database.UpdateOrderStatus(orderID, newStatus)
     order.status = newStatus
     order.version = (order.version or 1) + 1
     
+    -- Track who fulfilled the order
+    if newStatus == Database.STATUS.FULFILLED and fulfilledBy then
+        order.fulfilledBy = fulfilledBy
+        order.fulfilledAt = time()
+    end
+    
     -- Move to history if fulfilled or cancelled
     if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED then
         Database.MoveToHistory(order)
@@ -167,8 +237,8 @@ function Database.UpdateOrderStatus(orderID, newStatus)
     end
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s -> %s",
-            orderID, oldStatus, newStatus))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s -> %s%s",
+            orderID, oldStatus, newStatus, fulfilledBy and (" by " .. fulfilledBy) or ""))
     end
     
     return true
@@ -199,11 +269,11 @@ function Database.FulfillOrder(orderID)
     local order = GuildWorkOrdersDB.orders[orderID]
     local playerName = UnitName("player")
     
-    if order.player ~= playerName then
-        return false, "You can only fulfill your own orders"
+    if order.player == playerName then
+        return false, "You cannot fulfill your own orders"
     end
     
-    return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED)
+    return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, playerName)
 end
 
 -- Add or update order from sync
@@ -226,7 +296,7 @@ function Database.SyncOrder(orderData)
         if newVersion < existingVersion then
             -- Incoming data is older, ignore
             return false
-        elseif newVersion == existingVersion and existingOrder.timestamp >= orderData.timestamp then
+        elseif newVersion == existingVersion and (existingOrder.timestamp or 0) >= (orderData.timestamp or 0) then
             -- Same version but not newer, ignore
             return false
         end
@@ -263,12 +333,59 @@ end
 
 -- Get order history
 function Database.GetHistory()
-    return GuildWorkOrdersDB.history or {}
+    local history = GuildWorkOrdersDB.history or {}
+    
+    -- Clean up any corrupted item names in history
+    for _, order in ipairs(history) do
+        Database.CleanItemName(order)
+    end
+    
+    return history
 end
 
 -- Clear history
 function Database.ClearHistory()
     GuildWorkOrdersDB.history = {}
+    return true
+end
+
+-- Clear all database data (orders, history, keep config)
+function Database.ClearAllData()
+    if not GuildWorkOrdersDB then
+        return false
+    end
+    
+    -- Clear orders and history but preserve config and sync data structure
+    GuildWorkOrdersDB.orders = {}
+    GuildWorkOrdersDB.history = {}
+    
+    -- Reset sync data but keep structure
+    if GuildWorkOrdersDB.syncData then
+        GuildWorkOrdersDB.syncData.lastSync = 0
+        GuildWorkOrdersDB.syncData.onlineUsers = {}
+    end
+    
+    return true
+end
+
+-- Completely reset database (including config)
+function Database.ResetDatabase()
+    GuildWorkOrdersDB = {
+        config = {},
+        orders = {},
+        history = {},
+        syncData = {
+            lastSync = 0,
+            onlineUsers = {}
+        },
+        version = addon.version or "2.1.0"
+    }
+    
+    -- Reload config defaults
+    if addon.Config then
+        addon.Config.Load()
+    end
+    
     return true
 end
 

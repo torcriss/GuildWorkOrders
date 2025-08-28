@@ -13,25 +13,8 @@ local Parser = nil
 -- Command list for help
 local COMMAND_LIST = {
     {cmd = "", desc = "Open the work orders window"},
-    {cmd = "help", desc = "Show this help message"},
-    {cmd = "show", desc = "Open the work orders window"},
-    {cmd = "hide", desc = "Close the work orders window"},
-    {cmd = "toggle", desc = "Toggle the work orders window"},
-    {cmd = "post <WTB/WTS> [item] <qty> <price>", desc = "Quick post a work order"},
-    {cmd = "list", desc = "List active orders in chat"},
-    {cmd = "list <WTB/WTS>", desc = "List specific type of orders"},
-    {cmd = "search <item>", desc = "Search for orders containing item name"},
-    {cmd = "my", desc = "List your own orders"},
-    {cmd = "cancel <#>", desc = "Cancel your order by number"},
-    {cmd = "fulfill <#>", desc = "Mark your order as fulfilled by number"},
-    {cmd = "sync", desc = "Force sync with other guild members"},
-    {cmd = "stats", desc = "Show order statistics"},
-    {cmd = "clear", desc = "Clear order history"},
-    {cmd = "config", desc = "Show current configuration"},
-    {cmd = "config <setting> <value>", desc = "Change a configuration setting"},
-    {cmd = "reset", desc = "Reset configuration to defaults"},
-    {cmd = "debug", desc = "Toggle debug mode"},
-    {cmd = "version", desc = "Show addon version"}
+    {cmd = "minimap", desc = "Toggle minimap button"},
+    {cmd = "clear", desc = "Clear all orders and history (with confirmation)"}
 }
 
 function Commands.Initialize()
@@ -50,9 +33,15 @@ function Commands.Initialize()
     end
 end
 
--- Main slash command handler - only opens UI
+-- Main slash command handler - only opens UI (with minimap toggle exception)
 function Commands.HandleSlashCommand(input)
-    Commands.ShowUI()
+    if input and string.lower(input) == "minimap" then
+        Commands.ToggleMinimapButton()
+    elseif input and string.lower(input) == "clear" then
+        Commands.ClearDatabase()
+    else
+        Commands.ShowUI()
+    end
 end
 
 -- Show help
@@ -77,6 +66,34 @@ function Commands.HideUI()
         UI.Hide()
     end
 end
+
+-- Clear database with confirmation
+function Commands.ClearDatabase()
+    StaticPopup_Show("GWO_CLEAR_DATABASE")
+end
+
+-- StaticPopup for database clearing
+StaticPopupDialogs["GWO_CLEAR_DATABASE"] = {
+    text = "Are you sure you want to clear all orders and history?\n\nThis will remove:\n- All active orders\n- All order history\n- Reset sync data\n\nThis action cannot be undone!",
+    button1 = "Yes, Clear All",
+    button2 = "Cancel",
+    OnAccept = function()
+        if Database then
+            Database.ClearAllData()
+            print("|cff00ff00[GuildWorkOrders]|r Database cleared successfully! All orders and history have been removed.")
+            -- Refresh UI if open
+            if UI then
+                UI.RefreshOrders()
+                UI.UpdateStatusBar()
+            end
+        else
+            print("|cffff0000[GuildWorkOrders]|r Error: Database module not available")
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
 
 function Commands.ToggleUI()
     if UI then
@@ -441,7 +458,7 @@ end
 
 -- Show version
 function Commands.ShowVersion()
-    print("|cff00ff00[GuildWorkOrders]|r Version 1.0.0")
+    print("|cff00ff00[GuildWorkOrders]|r Version 2.1.0")
     print("  WoW Classic Era Interface 11507")
     if Config.IsDebugMode() then
         local syncStatus = Sync and Sync.GetSyncStatus() or {}
@@ -449,3 +466,23 @@ function Commands.ShowVersion()
         print(string.format("  Online Users: %d", syncStatus.onlineUsers or 0))
     end
 end
+
+-- Toggle minimap button
+function Commands.ToggleMinimapButton()
+    local Minimap = addon.Minimap
+    if not Minimap then
+        print("|cffff0000[GuildWorkOrders]|r Minimap module not available")
+        return
+    end
+    
+    if Minimap.IsShown() then
+        Minimap.Hide()
+        Config.Set("showMinimapButton", false)
+        print("|cff00ff00[GuildWorkOrders]|r Minimap button hidden")
+    else
+        Minimap.Show()
+        Config.Set("showMinimapButton", true)
+        print("|cff00ff00[GuildWorkOrders]|r Minimap button shown")
+    end
+end
+

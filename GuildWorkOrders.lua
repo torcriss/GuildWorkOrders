@@ -21,6 +21,7 @@ local function Initialize()
     if addon.Sync then addon.Sync.Initialize() end
     if addon.UI then addon.UI.Initialize() end
     if addon.Commands then addon.Commands.Initialize() end
+    if addon.Minimap then addon.Minimap.Initialize() end
     
     local playerName = UnitName("player")
     local _, class = UnitClass("player")
@@ -44,6 +45,17 @@ local function Initialize()
         if addon.Sync then
             addon.Sync.RequestSync()
             addon.Sync.SendPing()
+        end
+        -- Also update status bar to refresh sync time
+        if addon.UI and addon.UI.UpdateStatusBar then
+            addon.UI.UpdateStatusBar()
+        end
+    end)
+    
+    -- Status bar refresh timer (every 30 seconds) to keep "time ago" display current
+    C_Timer.NewTicker(30, function()
+        if addon.UI and addon.UI.UpdateStatusBar and addon.UI.IsShown and addon.UI.IsShown() then
+            addon.UI.UpdateStatusBar()
         end
     end)
     

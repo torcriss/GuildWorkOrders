@@ -21,6 +21,10 @@ local defaultConfig = {
     windowHeight = 500,
     currentTab = "buy",
     
+    -- Minimap settings
+    showMinimapButton = true,
+    minimapButtonAngle = 45,
+    
     -- Version tracking
     configVersion = "1.0"
 }
