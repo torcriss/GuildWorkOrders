@@ -289,6 +289,8 @@ function Parser.ParseWorkOrderMessage(message, playerName, messageType)
 end
 
 -- Parse guild chat message for work orders
+-- DISABLED: Guild chat parsing removed - orders now only created via addon UI/commands
+--[[
 function Parser.ProcessGuildMessage(message, sender)
     if not message or not sender then return end
     
@@ -349,6 +351,7 @@ function Parser.ProcessGuildMessage(message, sender)
         end
     end
 end
+--]]
 
 -- Validate order data before creation
 function Parser.ValidateOrderData(orderType, itemLink, quantity, price)

@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "1.0.1"
-addon.build = "Initial Release"
+addon.version = "2.0.0"
+addon.build = "Simplified UI with Buy/Sell Actions"
 
 -- Core initialization
 local function Initialize()
@@ -39,6 +39,14 @@ local function Initialize()
         end)
     end
     
+    -- Frequent auto-sync timer (every 3 minutes)
+    C_Timer.NewTicker(180, function()
+        if addon.Sync then
+            addon.Sync.RequestSync()
+            addon.Sync.SendPing()
+        end
+    end)
+    
     -- Periodic cleanup timer (every 10 minutes)
     C_Timer.NewTicker(600, function()
         if addon.Database then
@@ -57,19 +65,11 @@ end
 -- Event handling
 local GWO = CreateFrame("Frame")
 GWO:RegisterEvent("PLAYER_LOGIN")
-GWO:RegisterEvent("CHAT_MSG_GUILD")
 GWO:RegisterEvent("CHAT_MSG_ADDON")
 GWO:RegisterEvent("GUILD_ROSTER_UPDATE")
 GWO:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
         Initialize()
-        
-    elseif event == "CHAT_MSG_GUILD" then
-        -- Process guild messages for WTB/WTS orders
-        local message, sender = ...
-        if addon.Parser and sender ~= UnitName("player") then
-            addon.Parser.ProcessGuildMessage(message, sender)
-        end
         
     elseif event == "CHAT_MSG_ADDON" then
         -- Handle sync messages

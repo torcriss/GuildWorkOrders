@@ -272,35 +272,42 @@ function Database.ClearHistory()
     return true
 end
 
--- Cleanup expired orders
+-- Auto-complete expired orders (fulfill after 24 hours)
 function Database.CleanupExpiredOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
         return 0
     end
     
     local currentTime = time()
-    local expiredCount = 0
+    local completedCount = 0
     local toRemove = {}
     
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.expiresAt and order.expiresAt < currentTime then
-            order.status = Database.STATUS.EXPIRED
+        if order.expiresAt and order.expiresAt < currentTime and order.status == Database.STATUS.ACTIVE then
+            -- Auto-complete the order after 24 hours
+            order.status = Database.STATUS.FULFILLED
+            order.completedAt = currentTime
             Database.MoveToHistory(order)
             table.insert(toRemove, orderID)
-            expiredCount = expiredCount + 1
+            completedCount = completedCount + 1
+            
+            -- Broadcast the auto-completion
+            if addon.Sync then
+                addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.FULFILLED, (order.version or 1) + 1)
+            end
         end
     end
     
-    -- Remove expired orders
+    -- Remove auto-completed orders from active list
     for _, orderID in ipairs(toRemove) do
         GuildWorkOrdersDB.orders[orderID] = nil
     end
     
-    if expiredCount > 0 and Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d expired orders", expiredCount))
+    if completedCount > 0 and Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-completed %d orders after 24 hours", completedCount))
     end
     
-    return expiredCount
+    return completedCount
 end
 
 -- Helper function to parse price string to copper

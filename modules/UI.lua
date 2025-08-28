@@ -48,8 +48,8 @@ function UI.CreateMainFrame()
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetClampedToScreen(true)
-    frame:SetMinResize(600, 400)
-    frame:SetMaxResize(900, 700)
+    -- Note: SetMinResize/SetMaxResize not available in WoW Classic Era
+    -- Users can resize manually, bounds will be enforced via SetSize limits
     
     -- Title
     frame.TitleText:SetText("Guild Work Orders")
@@ -183,9 +183,9 @@ end
 function UI.CreateSearchBar()
     -- Search container
     local searchBar = CreateFrame("Frame", nil, mainFrame)
-    searchBar:SetPoint("TOPLEFT", 15, -65)
-    searchBar:SetPoint("TOPRIGHT", -15, -65)
-    searchBar:SetHeight(30)
+    searchBar:SetPoint("TOPLEFT", 15, -60)
+    searchBar:SetPoint("TOPRIGHT", -15, -60)
+    searchBar:SetHeight(25)
     
     -- Search label
     local searchLabel = searchBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -254,7 +254,7 @@ end
 function UI.CreateOrderList()
     -- Create scrollable list
     local scrollFrame = CreateFrame("ScrollFrame", nil, mainFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 15, -105)
+    scrollFrame:SetPoint("TOPLEFT", 15, -110)
     scrollFrame:SetPoint("BOTTOMRIGHT", -30, 40)
     
     local content = CreateFrame("Frame", nil, scrollFrame)
@@ -271,17 +271,18 @@ end
 -- Create column headers
 function UI.CreateColumnHeaders()
     local headers = {
-        {text = "Item", width = 200, x = 10},
-        {text = "Qty", width = 50, x = 215},
-        {text = "Price", width = 80, x = 270},
-        {text = "Player", width = 100, x = 355},
-        {text = "Time", width = 80, x = 460},
-        {text = "Action", width = 60, x = 545}
+        {text = "Item", width = 180, x = 10},
+        {text = "Qty", width = 40, x = 200},
+        {text = "Price", width = 60, x = 250},
+        {text = "Buyer", width = 80, x = 320},
+        {text = "Seller", width = 80, x = 410},
+        {text = "Time", width = 50, x = 500},
+        {text = "Action", width = 60, x = 560}
     }
     
     for _, header in ipairs(headers) do
         local label = mainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("TOPLEFT", header.x, -85)
+        label:SetPoint("TOPLEFT", header.x, -90)
         label:SetText("|cffFFD700" .. header.text .. "|r")
     end
 end
@@ -290,7 +291,7 @@ end
 function UI.CreateOrderRow(order, index)
     local row = CreateFrame("Button", nil, UI.listContent)
     row:SetSize(UI.listContent:GetWidth() - 20, 30)
-    row:SetPoint("TOPLEFT", 0, -(index - 1) * 35)
+    row:SetPoint("TOPLEFT", 0, -(index - 1) * 40)
     
     -- Background
     local bg = row:CreateTexture(nil, "BACKGROUND")
@@ -333,12 +334,12 @@ function UI.CreateOrderRow(order, index)
     
     -- Quantity
     local qty = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    qty:SetPoint("LEFT", 215, 0)
+    qty:SetPoint("LEFT", 200, 0)
     qty:SetText(order.quantity or "?")
     
     -- Price with color coding
     local price = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    price:SetPoint("LEFT", 270, 0)
+    price:SetPoint("LEFT", 250, 0)
     local priceText = order.price or "?"
     if string.find(priceText, "g") then
         price:SetText("|cffFFD700" .. priceText .. "|r")
@@ -348,24 +349,47 @@ function UI.CreateOrderRow(order, index)
         price:SetText("|cffB87333" .. priceText .. "|r")
     end
     
-    -- Player name
-    local player = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    player:SetPoint("LEFT", 355, 0)
-    player:SetText("|cff00ff00" .. (order.player or "Unknown") .. "|r")
+    -- Buyer column (who wants to buy)
+    local buyer = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    buyer:SetPoint("LEFT", 320, 0)
+    buyer:SetWidth(80)
+    buyer:SetJustifyH("LEFT")
+    
+    -- Seller column (who wants to sell)
+    local seller = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    seller:SetPoint("LEFT", 410, 0)
+    seller:SetWidth(80)
+    seller:SetJustifyH("LEFT")
+    
+    -- Set buyer/seller based on order type
+    local playerName = order.player or "Unknown"
+    if string.len(playerName) > 10 then
+        playerName = string.sub(playerName, 1, 8) .. "..."
+    end
+    
+    if order.type == Database.TYPE.WTB then
+        -- WTB order: player is the buyer
+        buyer:SetText("|cff00ff00" .. playerName .. "|r")
+        seller:SetText("|cff888888-|r")
+    else
+        -- WTS order: player is the seller
+        buyer:SetText("|cff888888-|r")
+        seller:SetText("|cff00ff00" .. playerName .. "|r")
+    end
     
     -- Time ago
     local timeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    timeText:SetPoint("LEFT", 460, 0)
+    timeText:SetPoint("LEFT", 500, 0)
     timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
     
     -- Action button
     local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     actionBtn:SetSize(60, 20)
-    actionBtn:SetPoint("LEFT", 545, 0)
+    actionBtn:SetPoint("LEFT", 560, 0)
     
     local playerName = UnitName("player")
     if order.player == playerName then
-        -- Own order - can cancel/fulfill
+        -- Own order - can cancel
         if currentTab == "history" then
             actionBtn:Hide()
         else
@@ -375,11 +399,22 @@ function UI.CreateOrderRow(order, index)
             end)
         end
     else
-        -- Others' orders - whisper them
-        actionBtn:SetText("Whisper")
-        actionBtn:SetScript("OnClick", function()
-            UI.WhisperPlayer(order)
-        end)
+        -- Others' orders - Buy/Sell actions
+        if currentTab == "history" then
+            actionBtn:Hide()
+        elseif order.type == Database.TYPE.WTB then
+            -- This is a Buy Order (someone wants to buy) - show "Sell" button
+            actionBtn:SetText("Sell")
+            actionBtn:SetScript("OnClick", function()
+                UI.ConfirmSellToOrder(order)
+            end)
+        elseif order.type == Database.TYPE.WTS then
+            -- This is a Sell Order (someone wants to sell) - show "Buy" button
+            actionBtn:SetText("Buy")
+            actionBtn:SetScript("OnClick", function()
+                UI.ConfirmBuyFromOrder(order)
+            end)
+        end
     end
     
     row.order = order
@@ -424,7 +459,7 @@ function UI.RefreshOrders()
     end
     
     -- Update scroll frame height
-    local height = #orders * 35 + 50
+    local height = #orders * 40 + 50
     UI.listContent:SetHeight(math.max(height, UI.scrollFrame:GetHeight()))
 end
 
@@ -759,4 +794,91 @@ end
 
 function UI.IsShown()
     return mainFrame and mainFrame:IsShown()
+end
+
+-- Confirmation dialog for canceling own order
+function UI.ConfirmCancelOrder(order)
+    StaticPopupDialogs["GWO_CANCEL_ORDER"] = {
+        text = string.format("Cancel your %s order for %s?", 
+            order.type == Database.TYPE.WTB and "buy" or "sell",
+            order.itemName or "item"),
+        button1 = "Yes",
+        button2 = "No",
+        OnAccept = function()
+            local success = Database.CancelOrder(order.id)
+            if success then
+                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
+                UI.RefreshOrders()
+            else
+                print("|cffff0000[GuildWorkOrders]|r Failed to cancel order")
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+    StaticPopup_Show("GWO_CANCEL_ORDER")
+end
+
+-- Confirmation dialog for selling to a buy order
+function UI.ConfirmSellToOrder(order)
+    local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
+    local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
+    
+    StaticPopupDialogs["GWO_SELL_TO_ORDER"] = {
+        text = string.format("Sell %s%s to %s%s?", 
+            qtyText,
+            order.itemName or "item",
+            order.player or "player",
+            priceText),
+        button1 = "Yes",
+        button2 = "No",
+        OnAccept = function()
+            -- Complete the order
+            local success = Database.FulfillOrder(order.id)
+            if success then
+                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
+                UI.RefreshOrders()
+            else
+                print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+    StaticPopup_Show("GWO_SELL_TO_ORDER")
+end
+
+-- Confirmation dialog for buying from a sell order
+function UI.ConfirmBuyFromOrder(order)
+    local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
+    local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
+    
+    StaticPopupDialogs["GWO_BUY_FROM_ORDER"] = {
+        text = string.format("Buy %s%s from %s%s?", 
+            qtyText,
+            order.itemName or "item",
+            order.player or "player",
+            priceText),
+        button1 = "Yes",
+        button2 = "No",
+        OnAccept = function()
+            -- Complete the order
+            local success = Database.FulfillOrder(order.id)
+            if success then
+                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
+                UI.RefreshOrders()
+            else
+                print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+            end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+    StaticPopup_Show("GWO_BUY_FROM_ORDER")
 end

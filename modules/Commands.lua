@@ -41,10 +41,8 @@ function Commands.Initialize()
     Sync = addon.Sync
     Parser = addon.Parser
     
-    -- Register slash commands
+    -- Register only /gwo slash command
     SLASH_GWO1 = "/gwo"
-    SLASH_GWO2 = "/workorders"
-    SLASH_GWO3 = "/workorder"
     SlashCmdList["GWO"] = Commands.HandleSlashCommand
     
     if Config.IsDebugMode() then
@@ -52,49 +50,9 @@ function Commands.Initialize()
     end
 end
 
--- Main slash command handler
+-- Main slash command handler - only opens UI
 function Commands.HandleSlashCommand(input)
-    local args = {strsplit(" ", input)}
-    local command = string.lower(args[1] or "")
-    
-    if command == "" or command == "show" then
-        Commands.ShowUI()
-    elseif command == "help" then
-        Commands.ShowHelp()
-    elseif command == "hide" then
-        Commands.HideUI()
-    elseif command == "toggle" then
-        Commands.ToggleUI()
-    elseif command == "post" then
-        Commands.PostOrder(args)
-    elseif command == "list" then
-        Commands.ListOrders(args[2])
-    elseif command == "search" then
-        Commands.SearchOrders(table.concat(args, " ", 2))
-    elseif command == "my" then
-        Commands.ListMyOrders()
-    elseif command == "cancel" then
-        Commands.CancelOrder(args[2])
-    elseif command == "fulfill" then
-        Commands.FulfillOrder(args[2])
-    elseif command == "sync" then
-        Commands.ForceSync()
-    elseif command == "stats" then
-        Commands.ShowStats()
-    elseif command == "clear" then
-        Commands.ClearHistory()
-    elseif command == "config" then
-        Commands.HandleConfig(args)
-    elseif command == "reset" then
-        Commands.ResetConfig()
-    elseif command == "debug" then
-        Commands.ToggleDebug()
-    elseif command == "version" then
-        Commands.ShowVersion()
-    else
-        print("|cffff0000[GuildWorkOrders]|r Unknown command: " .. command)
-        Commands.ShowHelp()
-    end
+    Commands.ShowUI()
 end
 
 -- Show help
