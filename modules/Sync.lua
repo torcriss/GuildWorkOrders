@@ -39,7 +39,7 @@ function Sync.Initialize()
     Database = addon.Database
     
     -- Register addon message prefix
-    RegisterAddonMessagePrefix(ADDON_PREFIX)
+    C_ChatInfo.RegisterAddonMessagePrefix(ADDON_PREFIX)
     
     -- Clean up expired online users
     Sync.CleanupOnlineUsers()
@@ -66,7 +66,7 @@ function Sync.ProcessQueue()
     local now = GetTime()
     if now - lastSendTime >= MESSAGE_DELAY then
         local msg = table.remove(messageQueue, 1)
-        SendAddonMessage(ADDON_PREFIX, msg.message, "GUILD", msg.target)
+        C_ChatInfo.SendAddonMessage(ADDON_PREFIX, msg.message, "GUILD", msg.target)
         lastSendTime = now
         
         if Config.IsDebugMode() then

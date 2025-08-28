@@ -9,7 +9,7 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "1.0.0"
+addon.version = "1.0.1"
 addon.build = "Initial Release"
 
 -- Core initialization
@@ -197,7 +197,7 @@ local function HandleAddonComm(prefix, message, channel, sender)
 end
 
 -- Register for addon communication
-RegisterAddonMessagePrefix("GWO_API")
+C_ChatInfo.RegisterAddonMessagePrefix("GWO_API")
 local commFrame = CreateFrame("Frame")
 commFrame:RegisterEvent("CHAT_MSG_ADDON")
 commFrame:SetScript("OnEvent", function(self, event, ...)
