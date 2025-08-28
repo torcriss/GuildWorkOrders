@@ -7,6 +7,11 @@ local Sync = addon.Sync
 local Config = nil
 local Database = nil
 
+-- Use server time for all timestamps to avoid clock sync issues
+local function GetCurrentTime()
+    return GetServerTime()
+end
+
 -- Constants
 local ADDON_PREFIX = "GWO_"
 local PROTOCOL_VERSION = 1
@@ -24,7 +29,11 @@ local MSG_TYPE = {
     SYNC_BATCH = "SYNC_BATCH", 
     SYNC_ACK = "SYNC_ACK",
     PING = "PING",
-    PONG = "PONG"
+    PONG = "PONG",
+    FULFILL_REQUEST = "FULFILL_REQ",  -- Request to fulfill an order
+    FULFILL_ACCEPT = "FULFILL_ACC",   -- Creator accepts fulfillment
+    FULFILL_REJECT = "FULFILL_REJ",   -- Creator rejects fulfillment  
+    HEARTBEAT = "HEARTBEAT"           -- Periodic broadcast of creator's orders
 }
 
 -- State tracking
@@ -44,8 +53,11 @@ function Sync.Initialize()
     -- Clean up expired online users
     Sync.CleanupOnlineUsers()
     
+    -- Start heartbeat system
+    Sync.StartHeartbeat()
+    
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Sync module initialized")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Sync module initialized with heartbeat")
     end
 end
 
@@ -84,7 +96,13 @@ end
 -- Handle incoming addon messages
 function Sync.OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= ADDON_PREFIX then return end
-    if sender == UnitName("player") then return end  -- Ignore own messages
+    
+    -- Ignore own messages - handle both with and without realm suffix
+    local playerName = UnitName("player")
+    local playerWithRealm = playerName .. "-" .. GetRealmName()
+    if sender == playerName or sender == playerWithRealm then 
+        return 
+    end
     
     local parts = {strsplit("|", message)}
     local msgType = parts[1]
@@ -100,7 +118,7 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
     
     -- Update online user
     onlineUsers[sender] = {
-        lastSeen = time(),
+        lastSeen = GetCurrentTime(),
         version = version
     }
     
@@ -123,6 +141,14 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
         Sync.HandlePing(parts, sender)
     elseif msgType == MSG_TYPE.PONG then
         Sync.HandlePong(parts, sender)
+    elseif msgType == MSG_TYPE.FULFILL_REQUEST then
+        Sync.HandleFulfillRequest(parts, sender)
+    elseif msgType == MSG_TYPE.FULFILL_ACCEPT then
+        Sync.HandleFulfillAccept(parts, sender)
+    elseif msgType == MSG_TYPE.FULFILL_REJECT then
+        Sync.HandleFulfillReject(parts, sender)
+    elseif msgType == MSG_TYPE.HEARTBEAT then
+        Sync.HandleHeartbeat(parts, sender)
     end
 end
 
@@ -202,8 +228,8 @@ function Sync.HandleNewOrder(parts, sender)
         itemLink = UnescapeDelimiters(parts[6]),
         quantity = tonumber(parts[7]),
         price = UnescapeDelimiters(parts[8]),
-        timestamp = tonumber(parts[9]) or time(),
-        expiresAt = tonumber(parts[10]) or (time() + 86400),
+        timestamp = tonumber(parts[9]) or GetCurrentTime(),
+        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 86400),
         version = tonumber(parts[11]) or 1,
         status = Database.STATUS.ACTIVE
     }
@@ -360,7 +386,7 @@ function Sync.HandleSyncRequest(parts, sender)
     
     -- Send sync info
     local batches = math.ceil(#ordersToSend / BATCH_SIZE)
-    local syncID = time() .. "_" .. math.random(1000, 9999)
+    local syncID = GetCurrentTime() .. "_" .. math.random(1000, 9999)
     
     local infoMessage = string.format("%s|%d|%s|%d|%d",
         MSG_TYPE.SYNC_INFO,
@@ -507,7 +533,7 @@ function Sync.HandleSyncBatch(parts, sender)
         Sync.QueueMessage(ackMessage, sender)
         
         -- Update last sync time
-        GuildWorkOrdersDB.syncData.lastSync = time()
+        GuildWorkOrdersDB.syncData.lastSync = GetCurrentTime()
         
         -- Clean up and refresh UI
         currentSyncSession = nil
@@ -563,7 +589,7 @@ end
 -- Handle pong message
 function Sync.HandlePong(parts, sender)
     onlineUsers[sender] = {
-        lastSeen = time(),
+        lastSeen = GetCurrentTime(),
         version = tonumber(parts[2]) or 1
     }
     
@@ -574,7 +600,7 @@ end
 
 -- Clean up offline users
 function Sync.CleanupOnlineUsers()
-    local currentTime = time()
+    local currentTime = GetCurrentTime()
     local toRemove = {}
     
     for playerName, userData in pairs(onlineUsers) do
@@ -607,7 +633,7 @@ end
 -- Get sync status
 function Sync.GetSyncStatus()
     local lastSync = GuildWorkOrdersDB.syncData.lastSync or 0
-    local timeAgo = lastSync > 0 and (time() - lastSync) or nil
+    local timeAgo = lastSync > 0 and (GetCurrentTime() - lastSync) or nil
     
     return {
         lastSync = lastSync,
@@ -615,4 +641,386 @@ function Sync.GetSyncStatus()
         inProgress = syncInProgress,
         onlineUsers = Sync.GetOnlineUserCount()
     }
+end
+
+-- ============================================================================
+-- FULFILLMENT REQUEST/RESPONSE SYSTEM
+-- ============================================================================
+
+-- Send fulfillment request
+function Sync.RequestFulfillment(orderID)
+    if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
+        return false, "Order not found"
+    end
+    
+    local order = GuildWorkOrdersDB.orders[orderID]
+    local playerName = UnitName("player")
+    
+    -- Cannot fulfill own orders
+    if order.player == playerName then
+        return false, "Cannot fulfill your own orders"
+    end
+    
+    -- Check if order is still active
+    if order.status ~= Database.STATUS.ACTIVE then
+        return false, "Order is no longer active"
+    end
+    
+    -- Check if order is expired
+    if order.expiresAt and order.expiresAt < GetCurrentTime() then
+        return false, "Order has expired"
+    end
+    
+    local message = string.format("%s|%d|%s|%s|%d",
+        MSG_TYPE.FULFILL_REQUEST,
+        PROTOCOL_VERSION,
+        orderID,
+        playerName,
+        GetCurrentTime()
+    )
+    
+    Sync.QueueMessage(message, order.player)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Requesting fulfillment of order %s from %s", 
+            orderID, order.player))
+    end
+    
+    return true
+end
+
+-- Handle fulfillment request (Creator receives this)
+function Sync.HandleFulfillRequest(parts, sender)
+    if #parts < 5 then return end
+    
+    local orderID = parts[3]
+    local requester = parts[4] 
+    local requestTime = tonumber(parts[5]) or GetCurrentTime()
+    
+    -- Check if this is my order
+    if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
+        -- Order not found, reject
+        Sync.SendFulfillReject(orderID, requester, "Order not found")
+        return
+    end
+    
+    local order = GuildWorkOrdersDB.orders[orderID]
+    local playerName = UnitName("player")
+    
+    -- Only I can accept fulfillment of my orders
+    if order.player ~= playerName then
+        return -- Ignore, not my order
+    end
+    
+    -- Check if order is still available
+    if order.status == Database.STATUS.PENDING then
+        -- Already have a pending fulfillment
+        Sync.SendFulfillReject(orderID, requester, "Order is already being fulfilled by " .. (order.pendingFulfiller or "someone"))
+        return
+    elseif order.status ~= Database.STATUS.ACTIVE then
+        Sync.SendFulfillReject(orderID, requester, "Order is no longer active")
+        return
+    end
+    
+    -- Check expiration
+    if order.expiresAt and order.expiresAt < time() then
+        Sync.SendFulfillReject(orderID, requester, "Order has expired")
+        return
+    end
+    
+    -- Accept the fulfillment request
+    order.status = Database.STATUS.PENDING
+    order.pendingFulfiller = requester
+    order.pendingTimestamp = requestTime
+    order.version = (order.version or 1) + 1
+    
+    -- Send acceptance
+    Sync.SendFulfillAccept(orderID, requester)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Accepted fulfillment request from %s for order %s", 
+            requester, orderID))
+    end
+    
+    -- Refresh UI
+    if addon.UI and addon.UI.RefreshOrders then
+        addon.UI.RefreshOrders()
+    end
+end
+
+-- Send fulfillment acceptance
+function Sync.SendFulfillAccept(orderID, requester)
+    local message = string.format("%s|%d|%s|%s",
+        MSG_TYPE.FULFILL_ACCEPT,
+        PROTOCOL_VERSION,
+        orderID,
+        requester
+    )
+    
+    Sync.QueueMessage(message, requester)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sent fulfillment acceptance to %s for order %s", 
+            requester, orderID))
+    end
+end
+
+-- Send fulfillment rejection
+function Sync.SendFulfillReject(orderID, requester, reason)
+    local message = string.format("%s|%d|%s|%s|%s",
+        MSG_TYPE.FULFILL_REJECT,
+        PROTOCOL_VERSION,
+        orderID,
+        requester,
+        EscapeDelimiters(reason or "")
+    )
+    
+    Sync.QueueMessage(message, requester)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sent fulfillment rejection to %s for order %s: %s", 
+            requester, orderID, reason))
+    end
+end
+
+-- Handle fulfillment acceptance (Requester receives this)
+function Sync.HandleFulfillAccept(parts, sender)
+    if #parts < 4 then return end
+    
+    local orderID = parts[3]
+    local requester = parts[4]
+    local playerName = UnitName("player")
+    
+    -- Check if this is for me
+    if requester ~= playerName then
+        return -- Not for me
+    end
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Fulfillment accepted by %s for order %s", 
+            sender, orderID))
+    end
+    
+    -- Update UI to show acceptance
+    if addon.UI and addon.UI.HandleFulfillmentResponse then
+        addon.UI.HandleFulfillmentResponse(orderID, "accepted", sender)
+    end
+    
+    -- Show notification
+    print(string.format("|cff00ff00[GuildWorkOrders]|r Your fulfillment request was accepted! Contact %s to arrange the trade.", sender))
+end
+
+-- Handle fulfillment rejection (Requester receives this) 
+function Sync.HandleFulfillReject(parts, sender)
+    if #parts < 5 then return end
+    
+    local orderID = parts[3]
+    local requester = parts[4]
+    local reason = UnescapeDelimiters(parts[5])
+    local playerName = UnitName("player")
+    
+    -- Check if this is for me
+    if requester ~= playerName then
+        return -- Not for me
+    end
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Fulfillment rejected by %s for order %s: %s", 
+            sender, orderID, reason))
+    end
+    
+    -- Update UI to show rejection
+    if addon.UI and addon.UI.HandleFulfillmentResponse then
+        addon.UI.HandleFulfillmentResponse(orderID, "rejected", sender, reason)
+    end
+    
+    -- Show notification
+    print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request rejected: %s", reason))
+end
+
+-- ============================================================================
+-- HEARTBEAT SYSTEM
+-- ============================================================================
+
+-- Send heartbeat with my orders (periodic broadcast)
+function Sync.SendHeartbeat()
+    if not Database then return end
+    
+    local myOrders = Database.GetMyCreatedOrders()
+    if not myOrders or #myOrders == 0 then
+        return -- No orders to broadcast
+    end
+    
+    local currentTime = GetCurrentTime()
+    local ordersToSend = {}
+    
+    for _, order in ipairs(myOrders) do
+        -- Include active, pending orders and recently completed (5 minute window)
+        if order.status == Database.STATUS.ACTIVE or 
+           order.status == Database.STATUS.PENDING or
+           (order.status == Database.STATUS.EXPIRED and 
+            order.expiredAt and currentTime - order.expiredAt < 300) or
+           (order.status == Database.STATUS.FULFILLED and 
+            order.fulfilledAt and currentTime - order.fulfilledAt < 300) or
+           (order.status == Database.STATUS.CANCELLED and 
+            order.completedAt and currentTime - order.completedAt < 300) then
+            
+            table.insert(ordersToSend, order)
+        end
+    end
+    
+    if #ordersToSend == 0 then
+        return -- No relevant orders to broadcast
+    end
+    
+    -- Send each order as a separate heartbeat message
+    for _, order in ipairs(ordersToSend) do
+        local message = string.format("%s|%d|%s|%s|%s|%s|%d|%s|%d|%d|%d|%s|%s|%d",
+            MSG_TYPE.HEARTBEAT,
+            PROTOCOL_VERSION,
+            order.id,
+            order.type,
+            order.player,
+            EscapeDelimiters(order.itemLink or ""),
+            order.quantity or 0,
+            EscapeDelimiters(order.price or ""),
+            order.timestamp,
+            order.expiresAt,
+            order.version or 1,
+            order.status,
+            EscapeDelimiters(order.pendingFulfiller or ""),
+            order.pendingTimestamp or 0
+        )
+        
+        Sync.QueueMessage(message)
+    end
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sent heartbeat with %d orders", #ordersToSend))
+    end
+    
+    -- Also cleanup expired orders during heartbeat
+    Database.CleanupExpiredOrders()
+end
+
+-- Handle heartbeat messages
+function Sync.HandleHeartbeat(parts, sender)
+    if #parts < 14 then return end
+    
+    local orderData = {
+        id = parts[3],
+        type = parts[4],
+        player = parts[5],
+        itemLink = UnescapeDelimiters(parts[6]),
+        quantity = tonumber(parts[7]),
+        price = UnescapeDelimiters(parts[8]),
+        timestamp = tonumber(parts[9]) or GetCurrentTime(),
+        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 86400),
+        version = tonumber(parts[11]) or 1,
+        status = parts[12],
+        pendingFulfiller = UnescapeDelimiters(parts[13]),
+        pendingTimestamp = tonumber(parts[14]) or 0
+    }
+    
+    -- Only accept heartbeat from the order creator
+    if orderData.player ~= sender then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
+                orderData.player, sender))
+        end
+        return
+    end
+    
+    -- Extract item name from item link
+    if orderData.itemLink and string.find(orderData.itemLink, "|H") then
+        orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]")
+        if not orderData.itemName then
+            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
+            if itemId then
+                orderData.itemName = "Item " .. itemId
+            else
+                orderData.itemName = "Unknown Item"
+            end
+        end
+    else
+        if orderData.itemLink and string.find(orderData.itemLink, "Hitem:") then
+            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
+            if itemId then
+                orderData.itemName = "Item " .. itemId
+            else
+                orderData.itemName = "Unknown Item"
+            end
+        else
+            orderData.itemName = orderData.itemLink or "Unknown Item"
+        end
+    end
+    
+    -- Add price in copper for sorting
+    orderData.priceInCopper = Database.ParsePriceToCopper(orderData.price)
+    
+    -- Handle different order statuses
+    if orderData.status == Database.STATUS.EXPIRED or orderData.status == Database.STATUS.FULFILLED or orderData.status == Database.STATUS.CANCELLED then
+        -- Remove from active orders if we have it
+        if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
+            GuildWorkOrdersDB.orders[orderData.id] = nil
+        end
+        
+        -- Don't add completed orders to history via heartbeat - they should only be in history
+        -- if they were completed locally. This prevents timestamp corruption from sync.
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring completed order from heartbeat: %s (%s)", 
+                orderData.id, orderData.status))
+        end
+    else
+        -- Active or pending order - sync normally
+        local success = Database.SyncOrder(orderData)
+        if success then
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Updated order from heartbeat: %s (%s)", 
+                    orderData.id, orderData.status))
+            end
+        end
+    end
+    
+    -- Refresh UI
+    if addon.UI and addon.UI.RefreshOrders then
+        addon.UI.RefreshOrders()
+        if addon.UI.UpdateStatusBar then
+            addon.UI.UpdateStatusBar()
+        end
+    end
+end
+
+-- Start periodic heartbeat timer
+local heartbeatTimer = nil
+function Sync.StartHeartbeat()
+    if heartbeatTimer then
+        heartbeatTimer:Cancel()
+    end
+    
+    -- Send heartbeat every 45 seconds
+    heartbeatTimer = C_Timer.NewTicker(45, function()
+        Sync.SendHeartbeat()
+    end)
+    
+    -- Send initial heartbeat after 5 seconds
+    C_Timer.After(5, function()
+        Sync.SendHeartbeat()
+    end)
+    
+    if Config.IsDebugMode() then
+        print("|cff00ff00[GuildWorkOrders Debug]|r Started heartbeat system")
+    end
+end
+
+-- Stop heartbeat timer
+function Sync.StopHeartbeat()
+    if heartbeatTimer then
+        heartbeatTimer:Cancel()
+        heartbeatTimer = nil
+        
+        if Config.IsDebugMode() then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Stopped heartbeat system")
+        end
+    end
 end

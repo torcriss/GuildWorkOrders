@@ -9,6 +9,11 @@ local Database = nil
 local Sync = nil
 local Parser = nil
 
+-- Use server time for all timestamps to avoid clock sync issues
+local function GetCurrentTime()
+    return GetServerTime()
+end
+
 -- UI State
 local mainFrame = nil
 local currentTab = "buy"
@@ -306,7 +311,7 @@ function UI.CreateColumnHeaders()
             {text = "Seller", width = 70, x = 460},
             {text = "Time", width = 50, x = 545},
             {text = "Status", width = 70, x = 610},
-            {text = "Completed", width = 90, x = 695}
+            {text = "Completed (Server)", width = 90, x = 695}
         }
     else
         headers = {
@@ -481,10 +486,28 @@ function UI.CreateOrderRow(order, index)
         end
     end
     
-    -- Time ago
+    -- Time ago / TTL countdown
     local timeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     timeText:SetPoint("LEFT", 545, 0)
-    timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
+    timeText:SetWidth(60)
+    timeText:SetJustifyH("CENTER")
+    
+    -- Show TTL countdown for active orders, "-" for completed orders
+    if order.status == Database.STATUS.ACTIVE and order.expiresAt then
+        local timeLeft = order.expiresAt - GetCurrentTime()
+        if timeLeft > 0 then
+            local ttlText, color = UI.GetTTLDisplay(timeLeft)
+            timeText:SetText(color .. ttlText .. "|r")
+        else
+            timeText:SetText("|cffff0000Expired|r")
+        end
+    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+        -- Show "-" for completed orders to avoid timestamp fluctuations
+        timeText:SetText("|cff888888-|r")
+    else
+        -- Show time ago for other statuses (like PENDING)
+        timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
+    end
     
     -- Handle history tab differently
     if currentTab == "history" then
@@ -531,35 +554,46 @@ function UI.CreateOrderRow(order, index)
         else
             -- Action button for active tabs
             local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            actionBtn:SetSize(60, 20)
+            actionBtn:SetSize(80, 20)  -- Increased width for new button states
             actionBtn:SetPoint("LEFT", 610, 0)
-        
-            if order.player == playerName then
-                -- Own order - can cancel
-                actionBtn:SetText("Cancel")
-                actionBtn:SetScript("OnClick", function()
-                    UI.ConfirmCancelOrder(order)
-                end)
-            else
-                -- Others' orders - Buy/Sell actions
-                if order.type == Database.TYPE.WTB then
-                    -- This is a Buy Order (someone wants to buy) - show "Sell" button
-                    actionBtn:SetText("Sell")
-                    actionBtn:SetScript("OnClick", function()
+            
+            -- Store button reference in row for later updates
+            row.actionButton = actionBtn
+            
+            -- Set up click handler for different scenarios
+            actionBtn:SetScript("OnClick", function()
+                if order.player == playerName then
+                    -- Own order
+                    if order.status == Database.STATUS.PENDING and order.pendingFulfiller then
+                        -- Complete the pending fulfillment
+                        local success = Database.CompleteFulfillment(order.id)
+                        if success then
+                            print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! %s fulfilled your order.", order.pendingFulfiller))
+                            UI.RefreshOrders()
+                        else
+                            print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+                        end
+                    else
+                        -- Cancel order
+                        UI.ConfirmCancelOrder(order)
+                    end
+                else
+                    -- Others' orders - use new request system
+                    if order.type == Database.TYPE.WTB then
                         UI.ConfirmSellToOrder(order)
-                    end)
-                elseif order.type == Database.TYPE.WTS then
-                    -- This is a Sell Order (someone wants to sell) - show "Buy" button
-                    actionBtn:SetText("Buy")
-                    actionBtn:SetScript("OnClick", function()
+                    elseif order.type == Database.TYPE.WTS then
                         UI.ConfirmBuyFromOrder(order)
-                    end)
+                    end
                 end
-            end
+            end)
+            
+            -- Initialize button state using new system
+            UI.UpdateOrderRowButton(row, order)
         end
     end
     
     row.order = order
+    row.orderID = order.id  -- Store order ID for button state tracking
     return row
 end
 
@@ -567,7 +601,7 @@ end
 function UI.GetTimeAgo(timestamp)
     if not timestamp then return "?" end
     
-    local now = time()
+    local now = GetCurrentTime()
     local diff = now - timestamp
     
     if diff < 60 then
@@ -581,17 +615,60 @@ function UI.GetTimeAgo(timestamp)
     end
 end
 
--- Format timestamp as date and time
+-- Get TTL display with color coding
+function UI.GetTTLDisplay(secondsLeft)
+    if secondsLeft <= 0 then
+        return "Expired", "|cffff0000"
+    end
+    
+    local hours = math.floor(secondsLeft / 3600)
+    local minutes = math.floor((secondsLeft % 3600) / 60)
+    
+    local text, color
+    
+    if hours >= 12 then
+        -- More than 12 hours - show hours, green
+        text = hours .. "h"
+        color = "|cff00ff00"  -- Green
+    elseif hours >= 2 then
+        -- 2-12 hours - show hours and minutes, yellow
+        if minutes > 0 then
+            text = hours .. "h" .. minutes .. "m"
+        else
+            text = hours .. "h"
+        end
+        color = "|cffFFD700"  -- Yellow/Gold
+    elseif hours >= 1 then
+        -- 1-2 hours - show hours and minutes, orange
+        text = hours .. "h" .. minutes .. "m"
+        color = "|cffFFA500"  -- Orange
+    else
+        -- Less than 1 hour - show minutes, red
+        text = minutes .. "m"
+        color = "|cffff0000"  -- Red
+    end
+    
+    return text, color
+end
+
+-- Format timestamp as date only (no time to avoid sync precision issues)
 function UI.FormatDateTime(timestamp)
     if not timestamp then return "-" end
     
-    local dateTable = date("*t", timestamp)
-    if not dateTable then return "?" end
+    -- Calculate days difference using simple day calculation
+    local currentTime = GetServerTime()
+    local daysDiff = math.floor((currentTime - timestamp) / 86400)
     
-    -- Format as: MM/DD HH:MM
-    return string.format("%02d/%02d %02d:%02d",
-        dateTable.month, dateTable.day,
-        dateTable.hour, dateTable.min)
+    if daysDiff == 0 then
+        return "Today"
+    elseif daysDiff == 1 then
+        return "Yesterday"
+    elseif daysDiff > 1 then
+        return string.format("%d days ago", daysDiff)
+    else
+        -- Future date (shouldn't happen for completed orders)
+        return string.format("%d days", -daysDiff)
+    end
 end
 
 -- Refresh order display
@@ -684,9 +761,10 @@ function UI.CreateStatusBar()
     
     -- Sync status
     local syncText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    syncText:SetPoint("CENTER", 0, 0)
+    syncText:SetPoint("LEFT", onlineText, "RIGHT", 20, 0)
     syncText:SetText("Last sync: Never")
     UI.syncText = syncText
+    
     
     -- Order count
     local countText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -707,12 +785,18 @@ function UI.UpdateStatusBar()
     local syncStatus = Sync.GetSyncStatus()
     local syncText = "Never"
     if syncStatus.lastSync > 0 then
-        syncText = UI.GetTimeAgo(syncStatus.lastSync) .. " ago"
+        local timeAgo = UI.GetTimeAgo(syncStatus.lastSync)
+        if timeAgo == "Now" then
+            syncText = timeAgo
+        else
+            syncText = timeAgo .. " ago"
+        end
     end
     if syncStatus.inProgress then
         syncText = "|cffFFD700Syncing...|r"
     end
     UI.syncText:SetText("Last sync: " .. syncText)
+    
     
     -- Update order count (always show active orders count)
     local activeOrders = Database.GetAllOrders()  -- Gets only active orders
@@ -1118,30 +1202,35 @@ function UI.ConfirmCancelOrder(order)
     StaticPopup_Show("GWO_CANCEL_ORDER")
 end
 
--- Confirmation dialog for selling to a buy order
+-- Request to fulfill a buy order (sell to buyer)
 function UI.ConfirmSellToOrder(order)
     local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
     local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_SELL_TO_ORDER"] = {
-        text = string.format("Sell %s%s to %s%s?", 
+        text = string.format("Request to sell %s%s to %s%s?\n\nThis will send a fulfillment request to %s.", 
             qtyText,
             order.itemName or "item",
             order.player or "player",
-            priceText),
-        button1 = "Yes",
-        button2 = "No",
+            priceText,
+            order.player or "player"),
+        button1 = "Send Request",
+        button2 = "Cancel",
         OnAccept = function()
-            -- Complete the order
-            local success = Database.FulfillOrder(order.id)
+            -- Send fulfillment request using new system
+            local success, errorMsg = Database.RequestFulfillOrder(order.id)
             if success then
-                local playerName = UnitName("player")
-                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
-                UI.RefreshOrders()
-                UI.UpdateStatusBar()  -- Update counter after completing order
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request sent to %s. Waiting for response...", order.player))
+                
+                -- Disable the button and show pending status
+                UI.SetButtonPending(order.id, "Requesting...")
+                
+                -- Set timeout for request
+                C_Timer.After(10, function()
+                    UI.SetButtonTimeout(order.id, "Request timed out - try again")
+                end)
             else
-                print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to send request"))
             end
         end,
         timeout = 0,
@@ -1151,30 +1240,35 @@ function UI.ConfirmSellToOrder(order)
     StaticPopup_Show("GWO_SELL_TO_ORDER")
 end
 
--- Confirmation dialog for buying from a sell order
+-- Request to fulfill a sell order (buy from seller)
 function UI.ConfirmBuyFromOrder(order)
     local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
     local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_BUY_FROM_ORDER"] = {
-        text = string.format("Buy %s%s from %s%s?", 
+        text = string.format("Request to buy %s%s from %s%s?\n\nThis will send a fulfillment request to %s.", 
             qtyText,
             order.itemName or "item",
             order.player or "player",
-            priceText),
-        button1 = "Yes",
-        button2 = "No",
+            priceText,
+            order.player or "player"),
+        button1 = "Send Request",
+        button2 = "Cancel",
         OnAccept = function()
-            -- Complete the order
-            local success = Database.FulfillOrder(order.id)
+            -- Send fulfillment request using new system
+            local success, errorMsg = Database.RequestFulfillOrder(order.id)
             if success then
-                local playerName = UnitName("player")
-                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
-                UI.RefreshOrders()
-                UI.UpdateStatusBar()  -- Update counter after completing order
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request sent to %s. Waiting for response...", order.player))
+                
+                -- Disable the button and show pending status
+                UI.SetButtonPending(order.id, "Requesting...")
+                
+                -- Set timeout for request
+                C_Timer.After(10, function()
+                    UI.SetButtonTimeout(order.id, "Request timed out - try again")
+                end)
             else
-                print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to send request"))
             end
         end,
         timeout = 0,
@@ -1182,4 +1276,156 @@ function UI.ConfirmBuyFromOrder(order)
         hideOnEscape = true,
     }
     StaticPopup_Show("GWO_BUY_FROM_ORDER")
+end
+
+-- ============================================================================
+-- BUTTON STATE MANAGEMENT FOR NEW REQUEST SYSTEM
+-- ============================================================================
+
+-- Track pending button states
+local pendingButtons = {}
+
+-- Set button to pending state
+function UI.SetButtonPending(orderID, text)
+    pendingButtons[orderID] = {
+        state = "pending",
+        text = text or "Requesting...",
+        timestamp = GetCurrentTime()
+    }
+    UI.RefreshOrderButtonState(orderID)
+end
+
+-- Set button to timeout state  
+function UI.SetButtonTimeout(orderID, text)
+    if pendingButtons[orderID] and pendingButtons[orderID].state == "pending" then
+        pendingButtons[orderID] = {
+            state = "timeout",
+            text = text or "Timed out",
+            timestamp = GetCurrentTime()
+        }
+        UI.RefreshOrderButtonState(orderID)
+        
+        -- Clear timeout after 3 seconds
+        C_Timer.After(3, function()
+            if pendingButtons[orderID] and pendingButtons[orderID].state == "timeout" then
+                pendingButtons[orderID] = nil
+                UI.RefreshOrderButtonState(orderID)
+            end
+        end)
+    end
+end
+
+-- Handle fulfillment response from sync system
+function UI.HandleFulfillmentResponse(orderID, response, sender, reason)
+    if response == "accepted" then
+        pendingButtons[orderID] = {
+            state = "accepted",
+            text = "✓ Accepted - Contact " .. sender,
+            timestamp = GetCurrentTime()
+        }
+        UI.RefreshOrderButtonState(orderID)
+        
+    elseif response == "rejected" then
+        pendingButtons[orderID] = {
+            state = "rejected", 
+            text = reason or "Request rejected",
+            timestamp = GetCurrentTime()
+        }
+        UI.RefreshOrderButtonState(orderID)
+        
+        -- Clear rejection message after 5 seconds
+        C_Timer.After(5, function()
+            if pendingButtons[orderID] and pendingButtons[orderID].state == "rejected" then
+                pendingButtons[orderID] = nil
+                UI.RefreshOrderButtonState(orderID)
+            end
+        end)
+    end
+end
+
+-- Refresh specific order button state
+function UI.RefreshOrderButtonState(orderID)
+    -- Find the order row and update its button
+    for _, row in ipairs(orderRows) do
+        if row.orderID == orderID then
+            UI.UpdateOrderRowButton(row, row.order)
+            break
+        end
+    end
+end
+
+-- Update order row button based on current state
+function UI.UpdateOrderRowButton(row, order)
+    if not row.actionButton then return end
+    
+    local playerName = UnitName("player")
+    local buttonState = pendingButtons[order.id]
+    
+    -- Check if this is my own order
+    if order.player == playerName then
+        if order.status == Database.STATUS.PENDING and order.pendingFulfiller then
+            -- My order has a pending fulfillment - show complete button
+            row.actionButton:SetText("Complete Trade")
+            row.actionButton:SetEnabled(true)
+            row.actionButton:Show()
+        else
+            -- My order - show cancel/status
+            row.actionButton:SetText("Cancel")
+            row.actionButton:SetEnabled(true) 
+            row.actionButton:Show()
+        end
+        return
+    end
+    
+    -- Check button state for pending requests
+    if buttonState then
+        if buttonState.state == "pending" then
+            row.actionButton:SetText(buttonState.text)
+            row.actionButton:SetEnabled(false)
+            row.actionButton:Show()
+        elseif buttonState.state == "accepted" then
+            row.actionButton:SetText(buttonState.text)
+            row.actionButton:SetEnabled(false)  -- Keep disabled, just info
+            row.actionButton:Show()
+        elseif buttonState.state == "rejected" or buttonState.state == "timeout" then
+            row.actionButton:SetText(buttonState.text)
+            row.actionButton:SetEnabled(false)
+            row.actionButton:Show()
+        end
+        return
+    end
+    
+    -- Default button state based on order status
+    if order.status == Database.STATUS.ACTIVE then
+        -- Check if order is expired
+        if order.expiresAt and order.expiresAt < GetCurrentTime() then
+            row.actionButton:SetText("Expired")
+            row.actionButton:SetEnabled(false)
+            row.actionButton:Show()
+        else
+            -- Active order - show buy/sell button
+            if order.type == Database.TYPE.WTB then
+                row.actionButton:SetText("Sell")
+                row.actionButton:SetEnabled(true)
+            else
+                row.actionButton:SetText("Buy")
+                row.actionButton:SetEnabled(true)
+            end
+            row.actionButton:Show()
+        end
+    elseif order.status == Database.STATUS.PENDING then
+        row.actionButton:SetText("Pending...")
+        row.actionButton:SetEnabled(false)
+        row.actionButton:Show()
+    elseif order.status == Database.STATUS.EXPIRED then
+        row.actionButton:SetText("Expired")
+        row.actionButton:SetEnabled(false)
+        row.actionButton:Show()
+    elseif order.status == Database.STATUS.FULFILLED then
+        row.actionButton:SetText("Completed")
+        row.actionButton:SetEnabled(false)
+        row.actionButton:Show()
+    else
+        row.actionButton:Hide()
+    end
 end

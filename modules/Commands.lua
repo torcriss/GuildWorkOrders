@@ -14,7 +14,10 @@ local Parser = nil
 local COMMAND_LIST = {
     {cmd = "", desc = "Open the work orders window"},
     {cmd = "minimap", desc = "Toggle minimap button"},
-    {cmd = "clear", desc = "Clear all orders and history (with confirmation)"}
+    {cmd = "clear", desc = "Clear all orders and history (with confirmation)"},
+    {cmd = "sync", desc = "Force sync with guild members"},
+    {cmd = "debug", desc = "Toggle debug mode"},
+    {cmd = "stats", desc = "Show addon statistics"}
 }
 
 function Commands.Initialize()
@@ -33,12 +36,22 @@ function Commands.Initialize()
     end
 end
 
--- Main slash command handler - only opens UI (with minimap toggle exception)
+-- Main slash command handler
 function Commands.HandleSlashCommand(input)
-    if input and string.lower(input) == "minimap" then
+    local cmd = input and string.lower(input) or ""
+    
+    if cmd == "minimap" then
         Commands.ToggleMinimapButton()
-    elseif input and string.lower(input) == "clear" then
+    elseif cmd == "clear" then
         Commands.ClearDatabase()
+    elseif cmd == "sync" then
+        Commands.ForceSync()
+    elseif cmd == "debug" then
+        Commands.ToggleDebug()
+    elseif cmd == "stats" then
+        Commands.ShowStats()
+    elseif cmd == "help" then
+        Commands.ShowHelp()
     else
         Commands.ShowUI()
     end
@@ -348,6 +361,18 @@ function Commands.ForceSync()
         print("|cff00ff00[GuildWorkOrders]|r Requesting sync from guild...")
     else
         print("|cffff0000[GuildWorkOrders]|r Sync not available")
+    end
+end
+
+-- Toggle debug mode
+function Commands.ToggleDebug()
+    if Config then
+        local currentDebug = Config.Get("debugMode") or false
+        Config.Set("debugMode", not currentDebug)
+        local newState = not currentDebug and "enabled" or "disabled"
+        print(string.format("|cff00ff00[GuildWorkOrders]|r Debug mode %s", newState))
+    else
+        print("|cffff0000[GuildWorkOrders]|r Config not available")
     end
 end
 

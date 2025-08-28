@@ -6,12 +6,18 @@ local Database = addon.Database
 -- Local references
 local Config = nil  -- Will be set in Initialize
 
+-- Use server time for all timestamps to avoid clock sync issues
+local function GetCurrentTime()
+    return GetServerTime()
+end
+
 -- Order status constants
 Database.STATUS = {
     ACTIVE = "active",
+    PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response
     FULFILLED = "fulfilled", 
     CANCELLED = "cancelled",
-    EXPIRED = "expired"
+    EXPIRED = "expired"        -- Auto-expired after 24 hours (distinct from fulfilled)
 }
 
 -- Order type constants
@@ -27,7 +33,7 @@ end
 
 -- Generate unique order ID
 function Database.GenerateOrderID(playerName)
-    local timestamp = time()
+    local timestamp = GetCurrentTime()
     local random = math.random(1000, 9999)
     return string.format("%d_%s_%d", timestamp, playerName, random)
 end
@@ -77,8 +83,8 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
         price = price,
         priceInCopper = priceInCopper,
         message = message or "",
-        timestamp = time(),
-        expiresAt = time() + (Config.Get("orderExpiry") or 86400),
+        timestamp = GetCurrentTime(),
+        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 86400),
         status = Database.STATUS.ACTIVE,
         version = 1
     }
@@ -135,7 +141,7 @@ function Database.GetAllOrders()
     local orders = {}
     for id, order in pairs(GuildWorkOrdersDB.orders) do
         -- Only include active orders that haven't expired
-        if order.status == Database.STATUS.ACTIVE and order.expiresAt > time() then
+        if order.status == Database.STATUS.ACTIVE and order.expiresAt > GetCurrentTime() then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(orders, order)
@@ -164,7 +170,7 @@ function Database.GetOrdersByType(orderType)
     return filteredOrders
 end
 
--- Get player's own orders
+-- Get player's own orders (for My Orders tab)
 function Database.GetMyOrders()
     local playerName = UnitName("player")
     local myOrders = {}
@@ -189,6 +195,44 @@ function Database.GetMyOrders()
     table.sort(myOrders, function(a, b)
         return (a.timestamp or 0) > (b.timestamp or 0)
     end)
+    
+    return myOrders
+end
+
+-- Get orders created by me (for heartbeat broadcasting)
+function Database.GetMyCreatedOrders()
+    local playerName = UnitName("player")
+    local myOrders = {}
+    
+    -- Get active/pending orders I created
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+        for _, order in pairs(GuildWorkOrdersDB.orders) do
+            if order.player == playerName then
+                table.insert(myOrders, order)
+            end
+        end
+    end
+    
+    -- Get recently completed orders I created (from history) - only within last 5 minutes
+    local currentTime = GetCurrentTime()
+    local history = Database.GetHistory()
+    for _, order in ipairs(history) do
+        if order.player == playerName then
+            -- Only include recently completed orders (within 5 minutes)
+            local timeSinceCompleted = nil
+            if order.completedAt then
+                timeSinceCompleted = currentTime - order.completedAt
+            elseif order.fulfilledAt then
+                timeSinceCompleted = currentTime - order.fulfilledAt
+            elseif order.expiredAt then
+                timeSinceCompleted = currentTime - order.expiredAt
+            end
+            
+            if timeSinceCompleted and timeSinceCompleted < 300 then -- 5 minutes
+                table.insert(myOrders, order)
+            end
+        end
+    end
     
     return myOrders
 end
@@ -227,7 +271,7 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     -- Track who fulfilled the order
     if newStatus == Database.STATUS.FULFILLED and fulfilledBy then
         order.fulfilledBy = fulfilledBy
-        order.fulfilledAt = time()
+        order.fulfilledAt = GetCurrentTime()
     end
     
     -- Move to history if fulfilled or cancelled
@@ -260,8 +304,8 @@ function Database.CancelOrder(orderID)
     return Database.UpdateOrderStatus(orderID, Database.STATUS.CANCELLED)
 end
 
--- Fulfill order (only own orders)
-function Database.FulfillOrder(orderID)
+-- Complete fulfillment (only for order creators when they accept pending fulfillment)
+function Database.CompleteFulfillment(orderID)
     if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
         return false, "Order not found"
     end
@@ -269,11 +313,28 @@ function Database.FulfillOrder(orderID)
     local order = GuildWorkOrdersDB.orders[orderID]
     local playerName = UnitName("player")
     
-    if order.player == playerName then
-        return false, "You cannot fulfill your own orders"
+    -- Only the order creator can complete fulfillment
+    if order.player ~= playerName then
+        return false, "You can only complete fulfillment of your own orders"
     end
     
-    return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, playerName)
+    -- Order must be in pending state
+    if order.status ~= Database.STATUS.PENDING then
+        return false, "Order is not pending fulfillment"
+    end
+    
+    -- Complete the fulfillment
+    return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, order.pendingFulfiller)
+end
+
+-- Request to fulfill order (sends request to creator)
+function Database.RequestFulfillOrder(orderID)
+    -- Use the new request system instead of direct fulfillment
+    if addon.Sync then
+        return addon.Sync.RequestFulfillment(orderID)
+    else
+        return false, "Sync system not available"
+    end
 end
 
 -- Add or update order from sync
@@ -319,8 +380,10 @@ function Database.MoveToHistory(order)
         GuildWorkOrdersDB.history = {}
     end
     
-    -- Add completion timestamp
-    order.completedAt = time()
+    -- Add completion timestamp only if not already set
+    if not order.completedAt then
+        order.completedAt = GetCurrentTime()
+    end
     
     table.insert(GuildWorkOrdersDB.history, 1, order)
     
@@ -389,42 +452,66 @@ function Database.ResetDatabase()
     return true
 end
 
--- Auto-complete expired orders (fulfill after 24 hours)
+-- Auto-expire orders after 24 hours (mark as EXPIRED, not FULFILLED) 
 function Database.CleanupExpiredOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
         return 0
     end
     
-    local currentTime = time()
-    local completedCount = 0
+    local currentTime = GetCurrentTime()
+    local expiredCount = 0
     local toRemove = {}
+    local playerName = UnitName("player")
     
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.expiresAt and order.expiresAt < currentTime and order.status == Database.STATUS.ACTIVE then
-            -- Auto-complete the order after 24 hours
-            order.status = Database.STATUS.FULFILLED
-            order.completedAt = currentTime
-            Database.MoveToHistory(order)
-            table.insert(toRemove, orderID)
-            completedCount = completedCount + 1
-            
-            -- Broadcast the auto-completion
-            if addon.Sync then
-                addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.FULFILLED, (order.version or 1) + 1)
+        if order.expiresAt and order.expiresAt < currentTime then
+            -- Only process expired orders that are still active or pending
+            if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+                -- Only the creator has authority to expire their own orders
+                if order.player == playerName then
+                    -- I'm the creator - I have authority to expire it
+                    order.status = Database.STATUS.EXPIRED
+                    order.expiredAt = currentTime
+                    order.version = (order.version or 1) + 1
+                    
+                    -- Notify pending fulfiller that order expired
+                    if order.pendingFulfiller then
+                        print(string.format("|cffFFFF00[GuildWorkOrders]|r Your pending order for %s has expired", 
+                            order.itemName or "item"))
+                    end
+                    
+                    Database.MoveToHistory(order)
+                    table.insert(toRemove, orderID)
+                    expiredCount = expiredCount + 1
+                    
+                    -- Broadcast the expiration (not fulfillment)
+                    if addon.Sync then
+                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.EXPIRED, order.version)
+                    end
+                    
+                    -- Notify me that my order expired
+                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after 24 hours", 
+                        order.type, order.itemName or "item"))
+                        
+                else
+                    -- Not my order - just remove from my local view
+                    -- The creator will broadcast the expiration via heartbeat
+                    table.insert(toRemove, orderID)
+                end
             end
         end
     end
     
-    -- Remove auto-completed orders from active list
+    -- Remove expired orders from active list
     for _, orderID in ipairs(toRemove) do
         GuildWorkOrdersDB.orders[orderID] = nil
     end
     
-    if completedCount > 0 and Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-completed %d orders after 24 hours", completedCount))
+    if expiredCount > 0 and Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Expired %d orders after 24 hours", expiredCount))
     end
     
-    return completedCount
+    return expiredCount
 end
 
 -- Helper function to parse price string to copper
