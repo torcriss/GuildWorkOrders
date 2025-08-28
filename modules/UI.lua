@@ -273,13 +273,21 @@ end
 function UI.ClearColumnHeaders()
     if not mainFrame then return end
     
-    -- Find and remove existing header labels
-    for i, child in ipairs({mainFrame:GetChildren()}) do
-        if child.isHeaderLabel then
-            child:Hide()
-            child:SetParent(nil)
+    -- Store reference to headers for proper cleanup
+    if not UI.columnHeaders then
+        UI.columnHeaders = {}
+    end
+    
+    -- Remove existing headers
+    for _, header in ipairs(UI.columnHeaders) do
+        if header then
+            header:Hide()
+            header:SetParent(nil)
         end
     end
+    
+    -- Clear the table
+    UI.columnHeaders = {}
 end
 
 -- Create column headers
@@ -292,24 +300,24 @@ function UI.CreateColumnHeaders()
         headers = {
             {text = "Type", width = 50, x = 10},
             {text = "Item", width = 160, x = 70},
-            {text = "Qty", width = 40, x = 240},
-            {text = "Price", width = 60, x = 290},
-            {text = "Buyer", width = 70, x = 360},
-            {text = "Seller", width = 70, x = 440},
-            {text = "Time", width = 50, x = 520},
-            {text = "Status", width = 70, x = 580},
-            {text = "Completed", width = 80, x = 660}
+            {text = "Qty", width = 40, x = 245},
+            {text = "Price", width = 60, x = 300},
+            {text = "Buyer", width = 70, x = 375},
+            {text = "Seller", width = 70, x = 460},
+            {text = "Time", width = 50, x = 545},
+            {text = "Status", width = 70, x = 610},
+            {text = "Completed", width = 90, x = 695}
         }
     else
         headers = {
             {text = "Type", width = 50, x = 10},
             {text = "Item", width = 160, x = 70},
-            {text = "Qty", width = 40, x = 240},
-            {text = "Price", width = 60, x = 290},
-            {text = "Buyer", width = 70, x = 360},
-            {text = "Seller", width = 70, x = 440},
-            {text = "Time", width = 50, x = 520},
-            {text = "Action", width = 60, x = 580}
+            {text = "Qty", width = 40, x = 245},
+            {text = "Price", width = 60, x = 300},
+            {text = "Buyer", width = 70, x = 375},
+            {text = "Seller", width = 70, x = 460},
+            {text = "Time", width = 50, x = 545},
+            {text = "Action", width = 60, x = 610}
         }
     end
     
@@ -318,6 +326,9 @@ function UI.CreateColumnHeaders()
         label:SetPoint("TOPLEFT", header.x, -90)
         label:SetText("|cffFFD700" .. header.text .. "|r")
         label.isHeaderLabel = true  -- Mark for cleanup
+        
+        -- Store reference for proper cleanup
+        table.insert(UI.columnHeaders, label)
     end
 end
 
@@ -341,10 +352,23 @@ function UI.CreateOrderRow(order, index)
     highlight:SetAllPoints()
     highlight:SetColorTexture(0.3, 0.3, 0.3, 0.3)
     
+    -- Type column (WTB/WTS)
+    local typeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    typeText:SetPoint("LEFT", 10, 0)
+    typeText:SetWidth(50)
+    typeText:SetJustifyH("LEFT")
+    if order.type == Database.TYPE.WTB then
+        typeText:SetText("|cffff8080WTB|r")  -- Light red for Want To Buy
+    elseif order.type == Database.TYPE.WTS then
+        typeText:SetText("|cff80ff80WTS|r")  -- Light green for Want To Sell
+    else
+        typeText:SetText("|cffFFD700?|r")    -- Gold for unknown type
+    end
+    
     -- Item link/name
     local item = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    item:SetPoint("LEFT", 10, 0)
-    item:SetWidth(190)
+    item:SetPoint("LEFT", 70, 0)
+    item:SetWidth(160)
     item:SetJustifyH("LEFT")
     
     -- Make item link clickable if it's a real item link
@@ -368,14 +392,21 @@ function UI.CreateOrderRow(order, index)
     
     -- Quantity
     local qty = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    qty:SetPoint("LEFT", 200, 0)
-    qty:SetText(order.quantity or "?")
+    qty:SetPoint("LEFT", 245, 0)
+    local qtyText = order.quantity
+    if not qtyText or qtyText == "" or qtyText == 0 then
+        qty:SetText("?")
+    else
+        qty:SetText(tostring(qtyText))
+    end
     
     -- Price with color coding
     local price = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    price:SetPoint("LEFT", 250, 0)
-    local priceText = order.price or "?"
-    if string.find(priceText, "g") then
+    price:SetPoint("LEFT", 300, 0)
+    local priceText = order.price
+    if not priceText or priceText == "" then
+        price:SetText("?")
+    elseif string.find(priceText, "g") then
         price:SetText("|cffFFD700" .. priceText .. "|r")
     elseif string.find(priceText, "s") then
         price:SetText("|cffC0C0C0" .. priceText .. "|r")
@@ -385,13 +416,13 @@ function UI.CreateOrderRow(order, index)
     
     -- Buyer column (who wants to buy)
     local buyer = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    buyer:SetPoint("LEFT", 360, 0)
+    buyer:SetPoint("LEFT", 375, 0)
     buyer:SetWidth(70)
     buyer:SetJustifyH("LEFT")
     
     -- Seller column (who wants to sell)
     local seller = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    seller:SetPoint("LEFT", 440, 0)
+    seller:SetPoint("LEFT", 460, 0)
     seller:SetWidth(70)
     seller:SetJustifyH("LEFT")
     
@@ -413,16 +444,16 @@ function UI.CreateOrderRow(order, index)
     
     -- Time ago
     local timeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    timeText:SetPoint("LEFT", 520, 0)
+    timeText:SetPoint("LEFT", 545, 0)
     timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
     
     -- Handle history tab differently
     if currentTab == "history" then
         -- Status column for history
         local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statusText:SetPoint("LEFT", 580, 0)
+        statusText:SetPoint("LEFT", 610, 0)
         statusText:SetWidth(70)
-        statusText:SetJustifyH("CENTER")
+        statusText:SetJustifyH("LEFT")
         if order.status == Database.STATUS.FULFILLED then
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
@@ -433,11 +464,11 @@ function UI.CreateOrderRow(order, index)
         
         -- Completion timestamp column for history
         local completedText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        completedText:SetPoint("LEFT", 660, 0)
-        completedText:SetWidth(80)
+        completedText:SetPoint("LEFT", 695, 0)
+        completedText:SetWidth(90)  -- Increased width for date/time format
         completedText:SetJustifyH("LEFT")
         if order.completedAt then
-            completedText:SetText("|cff888888" .. UI.GetTimeAgo(order.completedAt) .. "|r")
+            completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
         else
             completedText:SetText("|cff888888-|r")
         end
@@ -445,7 +476,7 @@ function UI.CreateOrderRow(order, index)
         -- Action button for active tabs
         local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         actionBtn:SetSize(60, 20)
-        actionBtn:SetPoint("LEFT", 580, 0)
+        actionBtn:SetPoint("LEFT", 610, 0)
     
         local playerName = UnitName("player")
         if order.player == playerName then
@@ -494,9 +525,25 @@ function UI.GetTimeAgo(timestamp)
     end
 end
 
+-- Format timestamp as date and time
+function UI.FormatDateTime(timestamp)
+    if not timestamp then return "-" end
+    
+    local dateTable = date("*t", timestamp)
+    if not dateTable then return "?" end
+    
+    -- Format as: MM/DD HH:MM
+    return string.format("%02d/%02d %02d:%02d",
+        dateTable.month, dateTable.day,
+        dateTable.hour, dateTable.min)
+end
+
 -- Refresh order display
 function UI.RefreshOrders()
     if not mainFrame or not mainFrame:IsShown() then return end
+    
+    -- Recreate headers to ensure correct columns for current tab
+    UI.CreateColumnHeaders()
     
     -- Clear existing rows
     for _, row in ipairs(orderRows) do
@@ -611,16 +658,9 @@ function UI.UpdateStatusBar()
     end
     UI.syncText:SetText("Last sync: " .. syncText)
     
-    -- Update order count (only show active orders, not history)
-    if currentTab == "history" then
-        -- For history tab, show total active orders, not history count
-        local activeOrders = Database.GetAllOrders()  -- This gets active orders only
-        UI.countText:SetText("Active Orders: " .. #activeOrders)
-    else
-        -- For other tabs, show current filtered orders
-        local orders = UI.GetFilteredOrders()
-        UI.countText:SetText("Orders: " .. #orders)
-    end
+    -- Update order count (always show active orders count)
+    local activeOrders = Database.GetAllOrders()  -- Gets only active orders
+    UI.countText:SetText("Active Orders: " .. #activeOrders)
 end
 
 -- Show online users tooltip
@@ -688,7 +728,7 @@ end
 -- Create new order dialog
 function UI.CreateNewOrderDialog()
     local dialog = CreateFrame("Frame", "GWONewOrderDialog", UIParent, "BasicFrameTemplateWithInset")
-    dialog:SetSize(400, 300)
+    dialog:SetSize(600, 350)
     dialog:SetPoint("CENTER")
     dialog:SetMovable(true)
     dialog:EnableMouse(true)
@@ -722,15 +762,75 @@ function UI.CreateNewOrderDialog()
         buyRadio:SetChecked(false)
     end)
     
-    -- Item input
+    -- Item input (shift-click or drag-and-drop area)
     local itemLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     itemLabel:SetPoint("TOPLEFT", 30, -110)
-    itemLabel:SetText("Item:")
+    itemLabel:SetText("Item (Shift-click or Drag):")
     
+    -- Create an EditBox that can receive both text input and drag events
     local itemInput = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    itemInput:SetSize(250, 25)
+    itemInput:SetSize(350, 25)
     itemInput:SetPoint("LEFT", itemLabel, "RIGHT", 10, 0)
+    itemInput:SetText("")
     itemInput:SetAutoFocus(false)
+    itemInput:SetMaxLetters(50)
+    itemInput:RegisterForDrag("LeftButton")
+    itemInput:EnableMouse(true)
+    
+    -- Add tooltip for shift-click functionality
+    itemInput:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Item Selection", 1, 1, 1)
+        GameTooltip:AddLine("• Shift-click items from chat or bags", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("• Drag items from your bags", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("• Type item names manually", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    itemInput:SetScript("OnLeave", GameTooltip_Hide)
+    
+    -- Store the actual item link separately from display text
+    itemInput.itemLink = nil
+    
+    -- Drag and drop handlers
+    itemInput:SetScript("OnReceiveDrag", function(self)
+        local cursorType, itemID, itemLink = GetCursorInfo()
+        if cursorType == "item" and itemLink then
+            local itemName = string.match(itemLink, "%[(.-)%]")
+            if itemName then
+                self:SetText(itemName)
+                self.itemLink = itemLink
+                ClearCursor() -- Clear the dragged item from cursor
+                print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+            end
+        end
+    end)
+    
+    
+    -- Also handle mouse up for drag completion
+    itemInput:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" then
+            local cursorType, itemID, itemLink = GetCursorInfo()
+            if cursorType == "item" and itemLink then
+                local itemName = string.match(itemLink, "%[(.-)%]")
+                if itemName then
+                    self:SetText(itemName)
+                    self.itemLink = itemLink
+                    ClearCursor()
+                    print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+                end
+            end
+        end
+    end)
+    
+    -- Clear button for item selection
+    local clearBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    clearBtn:SetSize(50, 20)
+    clearBtn:SetPoint("LEFT", itemInput, "RIGHT", 5, 0)
+    clearBtn:SetText("Clear")
+    clearBtn:SetScript("OnClick", function()
+        itemInput:SetText("")
+        itemInput.itemLink = nil
+    end)
     
     -- Quantity input
     local qtyLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -738,7 +838,7 @@ function UI.CreateNewOrderDialog()
     qtyLabel:SetText("Quantity:")
     
     local qtyInput = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    qtyInput:SetSize(60, 25)
+    qtyInput:SetSize(80, 25)
     qtyInput:SetPoint("LEFT", qtyLabel, "RIGHT", 10, 0)
     qtyInput:SetAutoFocus(false)
     qtyInput:SetNumeric(true)
@@ -750,9 +850,10 @@ function UI.CreateNewOrderDialog()
     priceLabel:SetText("Price:")
     
     local priceInput = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    priceInput:SetSize(150, 25)
+    priceInput:SetSize(250, 25)
     priceInput:SetPoint("LEFT", priceLabel, "RIGHT", 10, 0)
     priceInput:SetAutoFocus(false)
+    priceInput:SetMaxLetters(20)
     
     -- Announce to guild checkbox
     local announceCheck = CreateFrame("CheckButton", nil, dialog, "UICheckButtonTemplate")
@@ -780,6 +881,31 @@ function UI.CreateNewOrderDialog()
         dialog:Hide()
     end)
     
+    
+    
+    -- No special cleanup needed for drag-only functionality
+    
+    -- Store reference to item input for easy access
+    dialog.itemInput = itemInput
+    
+    -- Hook ChatEdit_InsertLink to capture shift-clicks when dialog is open
+    if not UI.chatEditHooked then
+        UI.chatEditHooked = true
+        local origChatEdit_InsertLink = ChatEdit_InsertLink
+        ChatEdit_InsertLink = function(text)
+            if UI.newOrderDialog and UI.newOrderDialog:IsVisible() and text then
+                local itemName = string.match(text, "%[(.-)%]")
+                if itemName and UI.newOrderDialog.itemInput then
+                    UI.newOrderDialog.itemInput:SetText(itemName)
+                    UI.newOrderDialog.itemInput.itemLink = text
+                    print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+                    return true
+                end
+            end
+            return origChatEdit_InsertLink(text)
+        end
+    end
+    
     dialog:Hide()
     UI.newOrderDialog = dialog
 end
@@ -787,6 +913,11 @@ end
 -- Show new order dialog
 function UI.ShowNewOrderDialog()
     if UI.newOrderDialog then
+        -- Reset the item selection when dialog opens
+        if UI.newOrderDialog.itemInput then
+            UI.newOrderDialog.itemInput:SetText("")
+            UI.newOrderDialog.itemInput.itemLink = nil
+        end
         UI.newOrderDialog:Show()
     end
 end
@@ -794,19 +925,25 @@ end
 -- Create order from dialog
 function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceInput, announceCheck)
     local orderType = buyRadio:GetChecked() and Database.TYPE.WTB or Database.TYPE.WTS
-    local itemText = itemInput:GetText()
+    local itemLink = itemInput.itemLink
     local quantity = tonumber(qtyInput:GetText())
     local price = priceInput:GetText()
     
+    -- Validate that an item was selected
+    if not itemLink then
+        print("|cffff0000[GuildWorkOrders]|r Please select an item by shift-clicking or dragging it to the item field")
+        return
+    end
+    
     -- Validate input
-    local isValid, errors = Parser.ValidateOrderData(orderType, itemText, quantity, price)
+    local isValid, errors = Parser.ValidateOrderData(orderType, itemLink, quantity, price)
     if not isValid then
         print("|cffff0000[GuildWorkOrders]|r " .. table.concat(errors, ", "))
         return
     end
     
     -- Create the order
-    local order = Database.CreateOrder(orderType, itemText, quantity, price)
+    local order = Database.CreateOrder(orderType, itemLink, quantity, price)
     if order then
         -- Broadcast to other users
         Sync.BroadcastNewOrder(order)
@@ -825,6 +962,7 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
         -- Close dialog and refresh
         dialog:Hide()
         UI.RefreshOrders()
+        UI.UpdateStatusBar()  -- Update counter after creating order
         UI.SelectTab("my")  -- Switch to My Orders tab
         
         print(string.format("|cff00ff00[GuildWorkOrders]|r Created %s order for %s", orderType, itemText))
@@ -872,6 +1010,7 @@ function UI.ConfirmCancelOrder(order)
                 Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
                 UI.RefreshOrders()
+                UI.UpdateStatusBar()  -- Update counter after cancelling
             else
                 print("|cffff0000[GuildWorkOrders]|r Failed to cancel order")
             end
@@ -903,6 +1042,7 @@ function UI.ConfirmSellToOrder(order)
                 Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
                 UI.RefreshOrders()
+                UI.UpdateStatusBar()  -- Update counter after completing order
             else
                 print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
             end
@@ -934,6 +1074,7 @@ function UI.ConfirmBuyFromOrder(order)
                 Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! Contact %s to arrange the trade.", order.player))
                 UI.RefreshOrders()
+                UI.UpdateStatusBar()  -- Update counter after completing order
             else
                 print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
             end
