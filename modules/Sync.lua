@@ -126,6 +126,24 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
     end
 end
 
+-- Escape special characters in strings for sync messages
+local function EscapeDelimiters(str)
+    if not str then return "" end
+    str = string.gsub(str, "|", "##PIPE##")
+    str = string.gsub(str, ":", "##COLON##")  
+    str = string.gsub(str, ";", "##SEMICOLON##")
+    return str
+end
+
+-- Unescape special characters from sync messages  
+local function UnescapeDelimiters(str)
+    if not str then return "" end
+    str = string.gsub(str, "##PIPE##", "|")
+    str = string.gsub(str, "##COLON##", ":")
+    str = string.gsub(str, "##SEMICOLON##", ";")
+    return str
+end
+
 -- Broadcast new order
 function Sync.BroadcastNewOrder(order)
     local message = string.format("%s|%d|%s|%s|%s|%s|%d|%s|%d|%d|%d",
@@ -134,9 +152,9 @@ function Sync.BroadcastNewOrder(order)
         order.id,
         order.type,
         order.player,
-        order.itemLink or "",
+        EscapeDelimiters(order.itemLink or ""),
         order.quantity or 0,
-        order.price or "",
+        EscapeDelimiters(order.price or ""),
         order.timestamp,
         order.expiresAt,
         order.version or 1
@@ -150,20 +168,21 @@ function Sync.BroadcastNewOrder(order)
 end
 
 -- Broadcast order update
-function Sync.BroadcastOrderUpdate(orderID, status, version)
-    local message = string.format("%s|%d|%s|%s|%d",
+function Sync.BroadcastOrderUpdate(orderID, status, version, fulfilledBy)
+    local message = string.format("%s|%d|%s|%s|%d|%s",
         MSG_TYPE.UPDATE_ORDER,
         PROTOCOL_VERSION,
         orderID,
         status,
-        version or 1
+        version or 1,
+        fulfilledBy or ""
     )
     
     Sync.QueueMessage(message)
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting order update: %s -> %s", 
-            orderID, status))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting order update: %s -> %s%s", 
+            orderID, status, fulfilledBy and (" by " .. fulfilledBy) or ""))
     end
 end
 
@@ -180,14 +199,40 @@ function Sync.HandleNewOrder(parts, sender)
         id = parts[3],
         type = parts[4],
         player = parts[5],
-        itemLink = parts[6],
+        itemLink = UnescapeDelimiters(parts[6]),
         quantity = tonumber(parts[7]),
-        price = parts[8],
-        timestamp = tonumber(parts[9]),
-        expiresAt = tonumber(parts[10]),
+        price = UnescapeDelimiters(parts[8]),
+        timestamp = tonumber(parts[9]) or time(),
+        expiresAt = tonumber(parts[10]) or (time() + 86400),
         version = tonumber(parts[11]) or 1,
         status = Database.STATUS.ACTIVE
     }
+    
+    -- Extract item name from item link for proper display
+    if orderData.itemLink and string.find(orderData.itemLink, "|H") then
+        orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]")
+        if not orderData.itemName then
+            -- If extraction fails, try to get item name from item ID
+            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
+            if itemId then
+                orderData.itemName = "Item " .. itemId
+            else
+                orderData.itemName = "Unknown Item"
+            end
+        end
+    else
+        -- If not a proper item link, try to extract item ID or use as plain text
+        if orderData.itemLink and string.find(orderData.itemLink, "Hitem:") then
+            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
+            if itemId then
+                orderData.itemName = "Item " .. itemId
+            else
+                orderData.itemName = "Unknown Item"
+            end
+        else
+            orderData.itemName = orderData.itemLink or "Unknown Item"
+        end
+    end
     
     -- Validate order data
     if not orderData.id or not orderData.type or not orderData.player then
@@ -207,6 +252,9 @@ function Sync.HandleNewOrder(parts, sender)
     local success = Database.SyncOrder(orderData)
     if success and addon.UI and addon.UI.RefreshOrders then
         addon.UI.RefreshOrders()
+        if addon.UI.UpdateStatusBar then
+            addon.UI.UpdateStatusBar()  -- Update counter when new order synced
+        end
     end
 end
 
@@ -217,6 +265,7 @@ function Sync.HandleUpdateOrder(parts, sender)
     local orderID = parts[3]
     local status = parts[4]
     local version = tonumber(parts[5]) or 1
+    local fulfilledBy = parts[6] ~= "" and parts[6] or nil
     
     -- Find existing order
     if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderID] then
@@ -224,9 +273,19 @@ function Sync.HandleUpdateOrder(parts, sender)
         
         -- Version check
         if version > (existingOrder.version or 1) then
-            Database.UpdateOrderStatus(orderID, status)
+            Database.UpdateOrderStatus(orderID, status, fulfilledBy)
+            
+            -- Notify the original order creator if their order was fulfilled by someone else
+            if status == Database.STATUS.FULFILLED and fulfilledBy and existingOrder.player == UnitName("player") then
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Your %s order for %s has been fulfilled by %s! Contact them to arrange the trade.",
+                    existingOrder.type, existingOrder.itemName or "item", fulfilledBy))
+            end
+            
             if addon.UI and addon.UI.RefreshOrders then
                 addon.UI.RefreshOrders()
+                if addon.UI.UpdateStatusBar then
+                    addon.UI.UpdateStatusBar()  -- Update counter when order status changes
+                end
             end
         end
     end
@@ -242,6 +301,9 @@ function Sync.HandleDeleteOrder(parts, sender)
         GuildWorkOrdersDB.orders[orderID] = nil
         if addon.UI and addon.UI.RefreshOrders then
             addon.UI.RefreshOrders()
+            if addon.UI.UpdateStatusBar then
+                addon.UI.UpdateStatusBar()  -- Update counter when order deleted
+            end
         end
     end
 end
@@ -263,6 +325,10 @@ function Sync.RequestSync()
             syncInProgress = false
             if Config.IsDebugMode() then
                 print("|cff00ff00[GuildWorkOrders Debug]|r Sync request timed out")
+            end
+            -- Update UI when sync times out
+            if addon.UI and addon.UI.UpdateStatusBar then
+                addon.UI.UpdateStatusBar()
             end
         end
     end)
@@ -318,9 +384,9 @@ function Sync.HandleSyncRequest(parts, sender)
                 order.id,
                 order.type,
                 order.player,
-                order.itemLink or "",
+                EscapeDelimiters(order.itemLink or ""),
                 order.quantity or 0,
-                order.price or "",
+                EscapeDelimiters(order.price or ""),
                 order.timestamp,
                 order.expiresAt,
                 order.version or 1
@@ -395,9 +461,9 @@ function Sync.HandleSyncBatch(parts, sender)
                 id = orderParts[1],
                 type = orderParts[2],
                 player = orderParts[3],
-                itemLink = orderParts[4],
+                itemLink = UnescapeDelimiters(orderParts[4]),
                 quantity = tonumber(orderParts[5]),
-                price = orderParts[6],
+                price = UnescapeDelimiters(orderParts[6]),
                 timestamp = tonumber(orderParts[7]),
                 expiresAt = tonumber(orderParts[8]),
                 version = tonumber(orderParts[9]) or 1,
@@ -449,6 +515,9 @@ function Sync.HandleSyncBatch(parts, sender)
         
         if addon.UI and addon.UI.RefreshOrders then
             addon.UI.RefreshOrders()
+            if addon.UI.UpdateStatusBar then
+                addon.UI.UpdateStatusBar()  -- Update counter after sync complete
+            end
         end
         
         if Config.IsDebugMode() then
