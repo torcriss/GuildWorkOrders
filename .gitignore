@@ -1,0 +1,22 @@
+# WoW Addon specific files
+*.bak
+*.tmp
+WTF/
+Screenshots/
+Logs/
+
+# Development files
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.log
+debug.txt
+test_output.txt
