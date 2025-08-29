@@ -37,7 +37,8 @@ local MSG_TYPE = {
     FULFILL_ACCEPT = "FULFILL_ACC",   -- Creator accepts fulfillment
     FULFILL_REJECT = "FULFILL_REJ",   -- Creator rejects fulfillment  
     HEARTBEAT = "HEARTBEAT",          -- Periodic broadcast of creator's orders
-    CLEAR_ALL = "CLEAR_ALL"           -- Admin clear all orders command
+    CLEAR_ALL = "CLEAR_ALL",          -- Admin clear all orders command
+    CLEAR_SINGLE = "CLEAR_SINGLE"     -- Admin clear single order command
 }
 
 -- State tracking
@@ -112,14 +113,19 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= ADDON_PREFIX then return end
     
     -- Ignore own messages - handle both with and without realm suffix
+    -- Exception: Allow own CLEAR_SINGLE and CLEAR_ALL messages to process locally
     local playerName = UnitName("player")
     local playerWithRealm = playerName .. "-" .. GetRealmName()
-    if sender == playerName or sender == playerWithRealm then 
-        return 
-    end
+    local isOwnMessage = (sender == playerName or sender == playerWithRealm)
     
     local parts = {strsplit("|", message)}
     local msgType = parts[1]
+    local isAdminClearMessage = (msgType == MSG_TYPE.CLEAR_SINGLE or msgType == MSG_TYPE.CLEAR_ALL)
+    
+    if isOwnMessage and not isAdminClearMessage then 
+        return 
+    end
+    
     local version = tonumber(parts[2]) or 1
     
     -- Version check
@@ -165,6 +171,8 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
         Sync.HandleHeartbeat(parts, sender)
     elseif msgType == MSG_TYPE.CLEAR_ALL then
         Sync.HandleClearAll(parts, sender)
+    elseif msgType == MSG_TYPE.CLEAR_SINGLE then
+        Sync.HandleClearSingle(parts, sender)
     end
 end
 
@@ -1341,6 +1349,57 @@ function Sync.BroadcastClearAll(callback)
     end
     
     -- Call callback immediately for now - in a real implementation you might want to wait for confirmations
+    if callback then
+        callback()
+    end
+end
+
+-- Handle single order clear from another user
+function Sync.HandleClearSingle(parts, sender)
+    if #parts < 3 then return end
+    
+    local orderID = parts[3]
+    local clearedBy = parts[4] or sender
+    if not orderID then return end
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received single order clear from %s (order: %s)", clearedBy, orderID))
+    end
+    
+    -- Clear the specific order
+    if Database then
+        Database.ClearSingleOrder(orderID, clearedBy)
+    end
+    
+    -- Refresh UI
+    if addon.UI and addon.UI.RefreshOrders then
+        addon.UI.RefreshOrders()
+        if addon.UI.UpdateStatusBar then
+            addon.UI.UpdateStatusBar()
+        end
+    end
+    
+    print(string.format("|cffFFAA00[GuildWorkOrders]|r Order cleared by admin: %s", clearedBy))
+end
+
+-- Broadcast single order clear command to guild
+function Sync.BroadcastClearSingle(orderID, callback)
+    local clearedBy = UnitName("player")
+    
+    local message = string.format("%s|%d|%s|%s",
+        MSG_TYPE.CLEAR_SINGLE,
+        PROTOCOL_VERSION,
+        orderID,
+        clearedBy
+    )
+    
+    Sync.QueueMessage(message)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting single clear (order: %s, by: %s)", orderID, clearedBy))
+    end
+    
+    -- Call callback immediately
     if callback then
         callback()
     end

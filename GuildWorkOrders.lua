@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.2.1"
-addon.build = "Password-Protected Admin System & UI Improvements"
+addon.version = "2.3.0"
+addon.build = "Single Order Admin Clear & Enhanced Management"
 
 -- Core initialization
 local function Initialize()

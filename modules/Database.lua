@@ -780,3 +780,78 @@ end
 function Database.ExportOrdersForSync()
     return GuildWorkOrdersDB.orders or {}
 end
+
+-- Clear a single order by admin
+function Database.ClearSingleOrder(orderID, clearedBy)
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        return false
+    end
+    
+    if not orderID then
+        return false
+    end
+    
+    local orderFound = false
+    
+    -- Find and remove the order from both active orders and history
+    -- Always show debug for troubleshooting
+    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Looking for order ID: %s", orderID))
+    
+    -- Check active orders first
+    local count = 0
+    for id, order in pairs(GuildWorkOrdersDB.orders or {}) do
+        count = count + 1
+        if count <= 3 then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found active order ID: %s (item: %s)", id, order.itemName or "Unknown"))
+        end
+    end
+    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Total active orders: %d", count))
+    
+    -- Check history
+    local historyCount = 0
+    for i, order in ipairs(GuildWorkOrdersDB.history or {}) do
+        historyCount = historyCount + 1
+        if historyCount <= 3 then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found history order ID: %s (item: %s)", order.id or "Unknown", order.itemName or "Unknown"))
+        end
+    end
+    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Total history orders: %d", historyCount))
+    
+    -- Try to find in active orders first
+    local order = GuildWorkOrdersDB.orders[orderID]
+    if order then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing active order %s (%s) by admin %s", 
+            orderID, order.itemName or "Unknown", clearedBy or "Unknown"))
+        GuildWorkOrdersDB.orders[orderID] = nil
+        orderFound = true
+    else
+        -- Try to find in history
+        if GuildWorkOrdersDB.history then
+            for i = #GuildWorkOrdersDB.history, 1, -1 do
+                local historyOrder = GuildWorkOrdersDB.history[i]
+                if historyOrder and tostring(historyOrder.id) == tostring(orderID) then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing history order %s (%s) by admin %s", 
+                        orderID, historyOrder.itemName or "Unknown", clearedBy or "Unknown"))
+                    table.remove(GuildWorkOrdersDB.history, i)
+                    orderFound = true
+                    break
+                end
+            end
+        end
+    end
+    
+    if orderFound then
+        -- Database is automatically saved as SavedVariable
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Successfully cleared order %s", orderID))
+        end
+        
+        return true
+    else
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s not found for clearing", orderID))
+        end
+        
+        return false
+    end
+end

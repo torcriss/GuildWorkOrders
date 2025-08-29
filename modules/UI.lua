@@ -539,6 +539,46 @@ function UI.CreateOrderRow(order, index)
         else
             completedText:SetText("|cff888888-|r")
         end
+        
+        -- Admin clear button for history tab (positioned after date column)
+        local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        adminClearBtn:SetSize(20, 20)
+        adminClearBtn:SetPoint("LEFT", completedText, "RIGHT", 5, 0)
+        adminClearBtn:SetText("X")
+        
+        -- Simple styling approach - safer for Classic WoW
+        if adminClearBtn:GetNormalTexture() then
+            adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.2, 0.2, 1)
+        end
+        if adminClearBtn:GetHighlightTexture() then
+            adminClearBtn:GetHighlightTexture():SetColorTexture(1, 0.3, 0.3, 1)
+        end
+        if adminClearBtn:GetPushedTexture() then
+            adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
+        end
+        
+        -- Set font color to white
+        local btnText = adminClearBtn:GetFontString()
+        if btnText then
+            btnText:SetTextColor(1, 1, 1, 1)
+        end
+        
+        -- Add tooltip
+        adminClearBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
+            GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
+            GameTooltip:Show()
+        end)
+        adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
+        
+        -- Click handler - prompt for admin password
+        adminClearBtn:SetScript("OnClick", function()
+            UI.ConfirmAdminClearSingle(order)
+        end)
+        
+        -- Store reference for cleanup
+        row.adminClearButton = adminClearBtn
     else
         local playerName = UnitName("player")
         
@@ -555,6 +595,48 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cffff8080Cancelled|r")
             else
                 statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
+            end
+            
+            -- Admin clear button for cancelled orders (positioned after status text)
+            if order.status == Database.STATUS.CANCELLED then
+                local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                adminClearBtn:SetSize(20, 20)
+                adminClearBtn:SetPoint("LEFT", statusText, "RIGHT", 5, 0)
+                adminClearBtn:SetText("X")
+                
+                -- Simple styling approach - safer for Classic WoW
+                if adminClearBtn:GetNormalTexture() then
+                    adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.2, 0.2, 1)
+                end
+                if adminClearBtn:GetHighlightTexture() then
+                    adminClearBtn:GetHighlightTexture():SetColorTexture(1, 0.3, 0.3, 1)
+                end
+                if adminClearBtn:GetPushedTexture() then
+                    adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
+                end
+                
+                -- Set font color to white
+                local btnText = adminClearBtn:GetFontString()
+                if btnText then
+                    btnText:SetTextColor(1, 1, 1, 1)
+                end
+                
+                -- Add tooltip
+                adminClearBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
+                    GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
+                    GameTooltip:Show()
+                end)
+                adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
+                
+                -- Click handler - prompt for admin password
+                adminClearBtn:SetScript("OnClick", function()
+                    UI.ConfirmAdminClearSingle(order)
+                end)
+                
+                -- Store reference for cleanup
+                row.adminClearButton = adminClearBtn
             end
         else
             -- Action button for active tabs
@@ -594,6 +676,48 @@ function UI.CreateOrderRow(order, index)
             
             -- Initialize button state using new system
             UI.UpdateOrderRowButton(row, order)
+            
+            -- Admin clear button (red X) - show for active, pending, and cancelled orders
+            if (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING or order.status == Database.STATUS.CANCELLED) then
+                local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                adminClearBtn:SetSize(20, 20)
+                adminClearBtn:SetPoint("LEFT", actionBtn, "RIGHT", 5, 0)
+                adminClearBtn:SetText("X")
+                
+                -- Simple styling approach - safer for Classic WoW
+                if adminClearBtn:GetNormalTexture() then
+                    adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.2, 0.2, 1)
+                end
+                if adminClearBtn:GetHighlightTexture() then
+                    adminClearBtn:GetHighlightTexture():SetColorTexture(1, 0.3, 0.3, 1)
+                end
+                if adminClearBtn:GetPushedTexture() then
+                    adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
+                end
+                
+                -- Set font color to white
+                local btnText = adminClearBtn:GetFontString()
+                if btnText then
+                    btnText:SetTextColor(1, 1, 1, 1)
+                end
+                
+                -- Add tooltip
+                adminClearBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
+                    GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
+                    GameTooltip:Show()
+                end)
+                adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
+                
+                -- Click handler - prompt for admin password
+                adminClearBtn:SetScript("OnClick", function()
+                    UI.ConfirmAdminClearSingle(order)
+                end)
+                
+                -- Store reference for cleanup
+                row.adminClearButton = adminClearBtn
+            end
         end
     end
     
@@ -1598,7 +1722,7 @@ StaticPopupDialogs["GWO_ADMIN_PASSWORD"] = {
     OnShow = function(self)
         self.editBox:SetFocus()
         self.editBox:SetText("")
-        self.editBox:SetSecurityMode(true) -- Hide password characters
+        -- SetSecurityMode not available in Classic Era
     end,
     OnAccept = function(self)
         local password = self.editBox:GetText()
@@ -1643,6 +1767,80 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
         else
             print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
         end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+-- Single order admin clear function
+function UI.ConfirmAdminClearSingle(order)
+    -- Store the order reference for the dialogs
+    UI.pendingClearOrder = order
+    StaticPopup_Show("GWO_ADMIN_PASSWORD_SINGLE")
+end
+
+-- Single order admin password dialog
+StaticPopupDialogs["GWO_ADMIN_PASSWORD_SINGLE"] = {
+    text = "|cffFF6B6B[!] ADMIN ACCESS [!]|r\n\nEnter admin password to clear this order:",
+    button1 = "Clear Order",
+    button2 = "Cancel",
+    hasEditBox = true,
+    maxLetters = 20,
+    OnShow = function(self)
+        self.editBox:SetFocus()
+        self.editBox:SetText("")
+        -- SetSecurityMode not available in Classic Era
+    end,
+    OnAccept = function(self)
+        local password = self.editBox:GetText()
+        local success, errorMsg = Config.CheckAdminAccess(password)
+        
+        if success then
+            -- Show final confirmation dialog
+            StaticPopup_Show("GWO_ADMIN_CONFIRM_SINGLE")
+        else
+            print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg))
+            -- Clear the password field
+            self.editBox:SetText("")
+        end
+    end,
+    EditBoxOnEscapePressed = function(self)
+        self:GetParent():Hide()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+-- Single order final admin confirmation dialog
+StaticPopupDialogs["GWO_ADMIN_CONFIRM_SINGLE"] = {
+    text = "|cffFF6B6B[!] CONFIRM SINGLE ORDER CLEAR [!]|r\n\nThis will clear the selected order for ALL guild members!\n\n|cffFFAA00This action:|r\n• Removes this order globally\n• Notifies all addon users\n• Cannot be undone\n\n|cffFF6B6BAre you sure?|r",
+    button1 = "YES, CLEAR ORDER",
+    button2 = "Cancel",
+    OnAccept = function()
+        local order = UI.pendingClearOrder
+        if not order or not order.id then
+            print("|cffff0000[GuildWorkOrders]|r Error: No order selected for clearing")
+            return
+        end
+        
+        if addon.Sync and addon.Sync.BroadcastClearSingle then
+            print(string.format("|cffFFAA00[GuildWorkOrders]|r Clearing order: %s", order.itemName or "Unknown Item"))
+            addon.Sync.BroadcastClearSingle(tostring(order.id), function()
+                -- UI refresh handled by HandleClearSingle when broadcast message is received
+                print("|cff00ff00[GuildWorkOrders]|r Order clear broadcast sent!")
+            end)
+        else
+            print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
+        end
+        
+        -- Clear the pending order reference
+        UI.pendingClearOrder = nil
+    end,
+    OnCancel = function()
+        -- Clear the pending order reference
+        UI.pendingClearOrder = nil
     end,
     timeout = 0,
     whileDead = true,
