@@ -7,11 +7,14 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 - 🔇 **Hidden Communication** - Uses addon messages only (no guild chat spam)
 - 🔄 **Auto-Synchronization** - Real-time sync between all guild members with the addon
 - 🎯 **Smart Parsing** - Automatically detects WTB/WTS messages from guild chat
-- 📱 **Full UI** - Tabbed interface for managing all orders
-- ⚡ **Real-time Updates** - Orders update instantly across all users
-- 🛡️ **Conflict Resolution** - Handles network issues and duplicate orders
+- 📱 **Enhanced UI** - Tabbed interface with type column and improved order management
+- ⚡ **Real-time Updates** - Orders update instantly across all users with heartbeat system
+- 🛡️ **Advanced Sync Protocol** - Robust message validation and conflict resolution
 - ⏰ **Auto-Expiry** - Orders automatically expire after 24 hours
 - 📢 **Optional Announcements** - Can announce new orders to guild chat if desired
+- 🏷️ **Database Limits** - Smart order limits (200 total, 10 per user) with automatic cleanup
+- 🔧 **Message Size Optimization** - Efficient encoding prevents sync failures with any item type
+- 📊 **Status Indicators** - Real-time display of your orders and database usage
 
 ## Installation
 
@@ -53,8 +56,10 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 ### Synchronization
 - Orders are synchronized between guild members using hidden addon messages
 - No guild chat spam - all communication is invisible to non-addon users
-- Automatic conflict resolution handles network issues
-- Rate limiting prevents flooding (max 5 messages per second)
+- **Heartbeat System** - Periodic broadcasts ensure all users stay synchronized
+- **Advanced Conflict Resolution** - Version-based conflict resolution with timestamps
+- **Message Size Validation** - Prevents sync failures with legendary items and long names  
+- **Rate Limiting** - Prevents flooding (max 5 messages per second with intelligent batching)
 
 ### Order Parsing
 The addon automatically detects WTB/WTS patterns in guild chat:
@@ -64,10 +69,12 @@ The addon automatically detects WTB/WTS patterns in guild chat:
 - Only processes messages containing actual items
 
 ### Order Management
-- Orders expire after 24 hours automatically
-- Players can cancel or mark their own orders as fulfilled
-- Full history tracking of completed orders
-- Search and filter functionality
+- **Smart Limits** - Maximum 200 total orders, 10 active orders per user
+- **Automatic Cleanup** - Purges old history when database approaches limits
+- **Order Expiration** - Orders expire after 24 hours automatically
+- **Order Actions** - Players can cancel or mark their own orders as fulfilled
+- **Full History** - Complete tracking of completed orders with status details
+- **Advanced Search** - Search and filter functionality with real-time updates
 
 ## Configuration
 
@@ -117,11 +124,12 @@ GuildWorkOrders/
 ├── deploy.sh                    # Development deployment script
 └── modules/
     ├── Config.lua               # Configuration management
-    ├── Database.lua             # Order storage and management
+    ├── Database.lua             # Order storage with smart limits
     ├── Parser.lua               # WTB/WTS message parsing
-    ├── Sync.lua                 # Guild synchronization protocol
-    ├── UI.lua                   # User interface
-    └── Commands.lua             # Slash command system
+    ├── Sync.lua                 # Advanced guild synchronization protocol
+    ├── UI.lua                   # Enhanced user interface with status indicators
+    ├── Commands.lua             # Slash command system
+    └── Minimap.lua              # Minimap integration
 ```
 
 ### Building
@@ -150,4 +158,26 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v1.0.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.1.1** - Making guild trading easier, one order at a time! 🛒
+
+## Recent Updates (v2.1.1)
+
+### ✨ Major Enhancements
+- **🔧 Message Size Optimization** - Fixed sync failures with legendary items and long names
+- **🏷️ Database Limits** - Added smart limits (200 total orders, 10 per user) with automatic cleanup
+- **📊 Status Indicators** - Real-time display of order counts: "My Active: X/10 | Total Orders: X/200"
+- **🛡️ Enhanced Sync Protocol** - Robust message validation prevents all sync failures
+- **⚡ Improved UI Responsiveness** - Better order creation/cancellation feedback
+
+### 🔧 Technical Improvements
+- Efficient escape sequences reduce message size by 60%+ 
+- Heartbeat system ensures reliable guild-wide synchronization
+- Automatic purging of old orders when approaching limits
+- Color-coded limit warnings (red at limit, orange near limit)
+- Graceful handling of oversized orders with user notifications
+
+### 🐛 Bug Fixes
+- Fixed sync failures with items containing special characters
+- Resolved UI refresh issues when creating/cancelling orders  
+- Fixed message queue validation errors
+- Improved error handling and user feedback

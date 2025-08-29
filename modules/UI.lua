@@ -19,6 +19,8 @@ local mainFrame = nil
 local currentTab = "buy"
 local orderRows = {}
 local searchText = ""
+local newOrderBtn = nil
+local createOrderBtn = nil
 
 -- Tab definitions
 local TABS = {
@@ -77,6 +79,7 @@ function UI.CreateMainFrame()
     frame:SetScript("OnShow", function()
         UI.RefreshOrders()
         UI.UpdateStatusBar()
+        UI.UpdateCreateButtonStates()
     end)
     
     frame:SetScript("OnHide", function()
@@ -235,7 +238,7 @@ function UI.CreateSearchBar()
     end)
     
     -- New order button
-    local newOrderBtn = CreateFrame("Button", nil, searchBar, "UIPanelButtonTemplate")
+    newOrderBtn = CreateFrame("Button", nil, searchBar, "UIPanelButtonTemplate")
     newOrderBtn:SetSize(100, 25)
     newOrderBtn:SetPoint("RIGHT", -5, 0)
     newOrderBtn:SetText("New Order")
@@ -250,7 +253,9 @@ function UI.CreateSearchBar()
     refreshBtn:SetText("Refresh")
     refreshBtn:SetScript("OnClick", function()
         UI.RefreshOrders()
-        Sync.SendPing()  -- Refresh online users
+        if Sync then
+            Sync.SendPing()  -- Refresh online users
+        end
     end)
     
     UI.searchBox = searchBox
@@ -696,6 +701,9 @@ function UI.RefreshOrders()
     -- Update scroll frame height
     local height = #orders * 40 + 50
     UI.listContent:SetHeight(math.max(height, UI.scrollFrame:GetHeight()))
+    
+    -- Update button states based on limits
+    UI.UpdateCreateButtonStates()
 end
 
 -- Get filtered orders based on current tab and search
@@ -773,9 +781,67 @@ function UI.CreateStatusBar()
     UI.countText = countText
 end
 
+-- Update button enabled state based on order limits
+function UI.UpdateCreateButtonStates()
+    if not Database then return end
+    
+    local playerName = UnitName("player")
+    local canCreate, errorMsg = Database.CanCreateOrder(playerName)
+    
+    -- Update New Order button
+    if newOrderBtn then
+        newOrderBtn:SetEnabled(canCreate)
+        if canCreate then
+            newOrderBtn:SetAlpha(1.0)
+        else
+            newOrderBtn:SetAlpha(0.6)
+        end
+        
+        -- Update tooltip
+        newOrderBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if canCreate then
+                GameTooltip:SetText("Create a new work order", 1, 1, 1)
+            else
+                GameTooltip:SetText("Cannot create order", 1, 0.3, 0.3)
+                GameTooltip:AddLine(errorMsg, 1, 1, 1, true)
+            end
+            GameTooltip:Show()
+        end)
+        newOrderBtn:SetScript("OnLeave", function(self)
+            GameTooltip:Hide()
+        end)
+    end
+    
+    -- Update Create Order button in dialog
+    if createOrderBtn then
+        createOrderBtn:SetEnabled(canCreate)
+        if canCreate then
+            createOrderBtn:SetAlpha(1.0)
+        else
+            createOrderBtn:SetAlpha(0.6)
+        end
+        
+        -- Update tooltip
+        createOrderBtn:SetScript("OnEnter", function(self)
+            if not canCreate then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Cannot create order", 1, 0.3, 0.3)
+                GameTooltip:AddLine(errorMsg, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        createOrderBtn:SetScript("OnLeave", function(self)
+            if not canCreate then
+                GameTooltip:Hide()
+            end
+        end)
+    end
+end
+
 -- Update status bar
 function UI.UpdateStatusBar()
-    if not UI.onlineText then return end
+    if not UI.onlineText or not Sync then return end
     
     -- Update online count
     local onlineCount = Sync.GetOnlineUserCount()
@@ -798,9 +864,31 @@ function UI.UpdateStatusBar()
     UI.syncText:SetText("Last sync: " .. syncText)
     
     
-    -- Update order count (always show active orders count)
+    -- Update order counts
     local activeOrders = Database.GetAllOrders()  -- Gets only active orders
-    UI.countText:SetText("Active Orders: " .. #activeOrders)
+    local totalCount = Database.GetTotalOrderCount()  -- Total orders including history
+    local playerName = UnitName("player")
+    local userActiveCount = Database.GetUserActiveOrderCount(playerName)
+    local maxUserActive = Database.LIMITS.MAX_ACTIVE_PER_USER
+    
+    -- Show user's active orders with limit
+    local userText = string.format("My Active: %d/%d", userActiveCount, maxUserActive)
+    if userActiveCount >= maxUserActive then
+        userText = "|cffFF6B6B" .. userText .. "|r"  -- Red when at limit
+    elseif userActiveCount >= maxUserActive - 1 then
+        userText = "|cffFFAA00" .. userText .. "|r"  -- Orange when near limit
+    end
+    
+    -- Show total orders with limit
+    local maxTotalOrders = Database.LIMITS.MAX_TOTAL_ORDERS
+    local totalText = string.format("Total Orders: %d/%d", totalCount, maxTotalOrders)
+    if totalCount >= maxTotalOrders then
+        totalText = "|cffFF6B6B" .. totalText .. "|r"  -- Red when at limit
+    elseif totalCount >= maxTotalOrders - 10 then
+        totalText = "|cffFFAA00" .. totalText .. "|r"  -- Orange when near limit (within 10)
+    end
+    
+    UI.countText:SetText(string.format("%s | %s", userText, totalText))
 end
 
 -- Show online users tooltip
@@ -808,15 +896,19 @@ function UI.ShowOnlineTooltip(frame)
     GameTooltip:SetOwner(frame, "ANCHOR_TOPLEFT")
     GameTooltip:SetText("GuildWorkOrders Users Online")
     
-    local users = Sync.GetOnlineUsers()
-    local count = 0
-    for user, info in pairs(users) do
-        GameTooltip:AddLine(string.format("%s (v%d)", user, info.version))
-        count = count + 1
-    end
-    
-    if count == 0 then
-        GameTooltip:AddLine("|cff888888No other users online|r")
+    if Sync then
+        local users = Sync.GetOnlineUsers()
+        local count = 0
+        for user, info in pairs(users) do
+            GameTooltip:AddLine(string.format("%s (v%d)", user, info.version))
+            count = count + 1
+        end
+        
+        if count == 0 then
+            GameTooltip:AddLine("|cff888888No other users online|r")
+        end
+    else
+        GameTooltip:AddLine("|cff888888Sync not initialized|r")
     end
     
     GameTooltip:Show()
@@ -830,7 +922,9 @@ function UI.ConfirmCancelOrder(order)
         button2 = "No",
         OnAccept = function()
             Database.CancelOrder(order.id)
-            Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
+            if Sync then
+                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
+            end
             UI.RefreshOrders()
             print("|cff00ff00[GuildWorkOrders]|r Order cancelled")
         end,
@@ -1024,11 +1118,11 @@ function UI.CreateNewOrderDialog()
     announceLabel:SetText("Also announce in guild chat")
     
     -- Create button
-    local createBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-    createBtn:SetSize(100, 25)
-    createBtn:SetPoint("BOTTOMLEFT", 50, 20)
-    createBtn:SetText("Create Order")
-    createBtn:SetScript("OnClick", function()
+    createOrderBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    createOrderBtn:SetSize(100, 25)
+    createOrderBtn:SetPoint("BOTTOMLEFT", 50, 20)
+    createOrderBtn:SetText("Create Order")
+    createOrderBtn:SetScript("OnClick", function()
         UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceInput, announceCheck)
     end)
     
@@ -1088,6 +1182,7 @@ function UI.ShowNewOrderDialog()
             UI.newOrderDialog.itemInput:SetText("")
             UI.newOrderDialog.itemInput.itemLink = nil
         end
+        UI.UpdateCreateButtonStates()
         UI.newOrderDialog:Show()
     end
 end
@@ -1116,7 +1211,9 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
     local order = Database.CreateOrder(orderType, itemLink, quantity, price)
     if order then
         -- Broadcast to other users
-        Sync.BroadcastNewOrder(order)
+        if Sync then
+            Sync.BroadcastNewOrder(order)
+        end
         
         -- Announce to guild if requested
         if announceCheck:GetChecked() then
@@ -1187,7 +1284,9 @@ function UI.ConfirmCancelOrder(order)
         OnAccept = function()
             local success = Database.CancelOrder(order.id)
             if success then
-                Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
+                if Sync then
+                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
+                end
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
                 UI.RefreshOrders()
                 UI.UpdateStatusBar()  -- Update counter after cancelling

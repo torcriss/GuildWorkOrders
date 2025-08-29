@@ -26,6 +26,12 @@ Database.TYPE = {
     WTS = "WTS"
 }
 
+-- Database limit constants
+Database.LIMITS = {
+    MAX_TOTAL_ORDERS = 200,
+    MAX_ACTIVE_PER_USER = 10
+}
+
 function Database.Initialize()
     Config = addon.Config
     Database.CleanupExpiredOrders()
@@ -42,6 +48,22 @@ end
 function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     local playerName = UnitName("player")
     local realm = GetRealmName()
+    
+    -- Check if we can create a new order (limits)
+    local canCreate, errorMsg = Database.CanCreateOrder(playerName)
+    if not canCreate then
+        print(string.format("|cffFF6B6B[GuildWorkOrders]|r %s", errorMsg))
+        return nil, errorMsg
+    end
+    
+    -- Check if we need to purge old history to make room
+    local totalCount = Database.GetTotalOrderCount()
+    if totalCount >= Database.LIMITS.MAX_TOTAL_ORDERS then
+        local purged = Database.PurgeNonActiveOrders(Database.LIMITS.MAX_TOTAL_ORDERS - 1)
+        if purged > 0 then
+            print(string.format("|cffFFAA00[GuildWorkOrders]|r Purged %d old history entries to make room for new order", purged))
+        end
+    end
     
     -- Parse item name from link
     local itemName = itemLink
@@ -512,6 +534,104 @@ function Database.CleanupExpiredOrders()
     end
     
     return expiredCount
+end
+
+-- Get total order count (active + pending + history)
+function Database.GetTotalOrderCount()
+    local activeCount = 0
+    local historyCount = 0
+    
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+        for _, order in pairs(GuildWorkOrdersDB.orders) do
+            activeCount = activeCount + 1
+        end
+    end
+    
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.history then
+        historyCount = #GuildWorkOrdersDB.history
+    end
+    
+    return activeCount + historyCount
+end
+
+-- Get active order count for a specific user
+function Database.GetUserActiveOrderCount(playerName)
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        return 0
+    end
+    
+    local count = 0
+    for _, order in pairs(GuildWorkOrdersDB.orders) do
+        if order.player == playerName and 
+           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
+            count = count + 1
+        end
+    end
+    
+    return count
+end
+
+-- Get total active order count
+function Database.GetActiveOrderCount()
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        return 0
+    end
+    
+    local count = 0
+    for _, order in pairs(GuildWorkOrdersDB.orders) do
+        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+            count = count + 1
+        end
+    end
+    
+    return count
+end
+
+-- Purge non-active orders from history to make room for new orders
+function Database.PurgeNonActiveOrders(targetCount)
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.history then
+        return 0
+    end
+    
+    local purgeCount = 0
+    local currentTotal = Database.GetTotalOrderCount()
+    local needToPurge = currentTotal - targetCount
+    
+    if needToPurge <= 0 then
+        return 0
+    end
+    
+    -- Remove oldest history entries first (they're at the end of the array)
+    local historySize = #GuildWorkOrdersDB.history
+    local toPurge = math.min(needToPurge, historySize)
+    
+    for i = 1, toPurge do
+        table.remove(GuildWorkOrdersDB.history) -- Remove last (oldest) entry
+        purgeCount = purgeCount + 1
+    end
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %d old history entries to make room for new orders", purgeCount))
+    end
+    
+    return purgeCount
+end
+
+-- Check if we can create a new order (respects all limits)
+function Database.CanCreateOrder(playerName)
+    -- Check per-user limit
+    local userActiveCount = Database.GetUserActiveOrderCount(playerName)
+    if userActiveCount >= Database.LIMITS.MAX_ACTIVE_PER_USER then
+        return false, string.format("You have reached the maximum of %d active orders per user", Database.LIMITS.MAX_ACTIVE_PER_USER)
+    end
+    
+    -- Check total active orders limit
+    local totalActiveCount = Database.GetActiveOrderCount()
+    if totalActiveCount >= Database.LIMITS.MAX_TOTAL_ORDERS then
+        return false, string.format("Maximum of %d active orders reached. Cannot create new orders until some are completed", Database.LIMITS.MAX_TOTAL_ORDERS)
+    end
+    
+    return true, nil
 end
 
 -- Helper function to parse price string to copper

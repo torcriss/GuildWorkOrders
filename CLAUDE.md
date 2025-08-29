@@ -1,0 +1,2 @@
+- Always deploy (deploy.sh) locally changes so that I can test them once changes are completed.
+- you are forgetting to always deploy.sh when there's a change

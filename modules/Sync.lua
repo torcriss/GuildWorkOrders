@@ -17,7 +17,10 @@ local ADDON_PREFIX = "GWO_"
 local PROTOCOL_VERSION = 1
 local MESSAGE_DELAY = 0.2  -- 200ms between messages (5 per second)
 local SYNC_TIMEOUT = 30    -- 30 seconds
-local BATCH_SIZE = 5       -- Orders per batch
+local BATCH_SIZE = 1       -- Orders per batch (reduced to ensure messages stay under size limit)
+local MAX_HEARTBEAT_ORDERS = 10  -- Max orders per heartbeat (for performance)
+local MAX_MESSAGE_SIZE = 250      -- WoW addon message size limit (255 - 5 byte safety margin)
+local MAX_ITEMLINK_SIZE = 120     -- Maximum item link length in sync messages (increased due to more efficient escaping)
 
 -- Message types
 local MSG_TYPE = {
@@ -63,12 +66,22 @@ end
 
 -- Queue message for sending with rate limiting
 function Sync.QueueMessage(message, target)
+    -- Validate message size before queueing
+    local isValid, error = ValidateMessageSize(message)
+    if not isValid then
+        if Config.IsDebugMode() then
+            print(string.format("|cffFF6B6B[GuildWorkOrders Debug]|r Message rejected: %s", error))
+        end
+        return false
+    end
+    
     table.insert(messageQueue, {
         message = message,
         target = target,
         timestamp = GetTime()
     })
     Sync.ProcessQueue()
+    return true
 end
 
 -- Process message queue with rate limiting
@@ -155,19 +168,62 @@ end
 -- Escape special characters in strings for sync messages
 local function EscapeDelimiters(str)
     if not str then return "" end
-    str = string.gsub(str, "|", "##PIPE##")
-    str = string.gsub(str, ":", "##COLON##")  
-    str = string.gsub(str, ";", "##SEMICOLON##")
+    str = string.gsub(str, "|", "~P~")   -- |  -> ~P~ (1->3 chars instead of 1->8)
+    str = string.gsub(str, ":", "~C~")   -- :  -> ~C~ (1->3 chars instead of 1->9)  
+    str = string.gsub(str, ";", "~S~")   -- ;  -> ~S~ (1->3 chars instead of 1->12)
     return str
 end
 
 -- Unescape special characters from sync messages  
 local function UnescapeDelimiters(str)
     if not str then return "" end
-    str = string.gsub(str, "##PIPE##", "|")
-    str = string.gsub(str, "##COLON##", ":")
-    str = string.gsub(str, "##SEMICOLON##", ";")
+    str = string.gsub(str, "~P~", "|")
+    str = string.gsub(str, "~C~", ":")
+    str = string.gsub(str, "~S~", ";")
     return str
+end
+
+-- Truncate item link for sync messages while preserving essential info
+local function TruncateItemLink(itemLink)
+    if not itemLink then return "" end
+    
+    -- If it's already short enough, return as-is
+    if string.len(itemLink) <= MAX_ITEMLINK_SIZE then
+        return itemLink
+    end
+    
+    -- Try to extract item name from brackets for shortened version
+    local itemName = string.match(itemLink, "%[(.-)%]")
+    if itemName then
+        -- Create a shortened version with just the name
+        if string.len(itemName) <= MAX_ITEMLINK_SIZE - 10 then
+            return "[" .. itemName .. "]"
+        else
+            -- Even the name is too long, truncate it
+            return "[" .. string.sub(itemName, 1, MAX_ITEMLINK_SIZE - 13) .. "...]"
+        end
+    end
+    
+    -- Fallback: try to extract item ID for minimal representation
+    local itemId = string.match(itemLink, "Hitem:(%d+)")
+    if itemId then
+        return "Item " .. itemId
+    end
+    
+    -- Last resort: truncate the string
+    return string.sub(itemLink, 1, MAX_ITEMLINK_SIZE - 3) .. "..."
+end
+
+-- Validate message size before sending
+function ValidateMessageSize(message)
+    if not message then return false, "Empty message" end
+    
+    local messageSize = string.len(message)
+    if messageSize > MAX_MESSAGE_SIZE then
+        return false, string.format("Message too large: %d bytes (max %d)", messageSize, MAX_MESSAGE_SIZE)
+    end
+    
+    return true, nil
 end
 
 -- Broadcast new order
@@ -178,7 +234,7 @@ function Sync.BroadcastNewOrder(order)
         order.id,
         order.type,
         order.player,
-        EscapeDelimiters(order.itemLink or ""),
+        EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
         order.quantity or 0,
         EscapeDelimiters(order.price or ""),
         order.timestamp,
@@ -404,32 +460,59 @@ function Sync.HandleSyncRequest(parts, sender)
         local endIdx = math.min(batchNum * BATCH_SIZE, #ordersToSend)
         
         local batchData = {}
+        local skippedCount = 0
+        
         for i = startIdx, endIdx do
             local order = ordersToSend[i]
             local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d",
                 order.id,
                 order.type,
                 order.player,
-                EscapeDelimiters(order.itemLink or ""),
+                EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
                 order.quantity or 0,
                 EscapeDelimiters(order.price or ""),
                 order.timestamp,
                 order.expiresAt,
                 order.version or 1
             )
-            table.insert(batchData, orderStr)
+            
+            -- Check if adding this order would make the message too large
+            local testBatch = table.concat(batchData, ";")
+            if testBatch ~= "" then testBatch = testBatch .. ";" end
+            testBatch = testBatch .. orderStr
+            
+            local testMessage = string.format("%s|%d|%s|%d|%d|%s",
+                MSG_TYPE.SYNC_BATCH, PROTOCOL_VERSION, syncID, batchNum, batches, testBatch)
+            
+            local isValid, errorMsg = ValidateMessageSize(testMessage)
+            if isValid then
+                table.insert(batchData, orderStr)
+            else
+                skippedCount = skippedCount + 1
+                if Config.IsDebugMode() then
+                    print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Skipping oversized order in sync batch: %s (%s)",
+                        order.id, order.itemName or "Unknown Item"))
+                end
+            end
         end
         
-        local batchMessage = string.format("%s|%d|%s|%d|%d|%s",
-            MSG_TYPE.SYNC_BATCH,
-            PROTOCOL_VERSION,
-            syncID,
-            batchNum,
-            batches,
-            table.concat(batchData, ";")
-        )
+        if skippedCount > 0 and not Config.IsDebugMode() then
+            print(string.format("|cffFFAA00[GuildWorkOrders]|r Warning: %d orders skipped in sync due to size limits", skippedCount))
+        end
         
-        Sync.QueueMessage(batchMessage, sender)
+        -- Only send batch if it has orders
+        if #batchData > 0 then
+            local batchMessage = string.format("%s|%d|%s|%d|%d|%s",
+                MSG_TYPE.SYNC_BATCH,
+                PROTOCOL_VERSION,
+                syncID,
+                batchNum,
+                batches,
+                table.concat(batchData, ";")
+            )
+            
+            Sync.QueueMessage(batchMessage, sender)
+        end
     end
     
     if Config.IsDebugMode() then
@@ -847,7 +930,14 @@ function Sync.SendHeartbeat()
     if not Database then return end
     
     local myOrders = Database.GetMyCreatedOrders()
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found %d my orders for heartbeat", myOrders and #myOrders or 0))
+    end
+    
     if not myOrders or #myOrders == 0 then
+        if Config.IsDebugMode() then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Heartbeat skipped: no orders to broadcast")
+        end
         return -- No orders to broadcast
     end
     
@@ -855,6 +945,10 @@ function Sync.SendHeartbeat()
     local ordersToSend = {}
     
     for _, order in ipairs(myOrders) do
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s", order.id or "unknown", order.status or "unknown"))
+        end
+        
         -- Include active, pending orders and recently completed (5 minute window)
         if order.status == Database.STATUS.ACTIVE or 
            order.status == Database.STATUS.PENDING or
@@ -866,33 +960,128 @@ function Sync.SendHeartbeat()
             order.completedAt and currentTime - order.completedAt < 300) then
             
             table.insert(ordersToSend, order)
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Including order %s in heartbeat", order.id or "unknown"))
+            end
         end
     end
     
     if #ordersToSend == 0 then
+        if Config.IsDebugMode() then
+            print("|cff00ff00[GuildWorkOrders Debug]|r No orders passed filtering for heartbeat")
+        end
         return -- No relevant orders to broadcast
     end
     
-    -- Send each order as a separate heartbeat message
-    for _, order in ipairs(ordersToSend) do
-        local message = string.format("%s|%d|%s|%s|%s|%s|%d|%s|%d|%d|%d|%s|%s|%d",
-            MSG_TYPE.HEARTBEAT,
-            PROTOCOL_VERSION,
-            order.id,
-            order.type,
-            order.player,
-            EscapeDelimiters(order.itemLink or ""),
-            order.quantity or 0,
-            EscapeDelimiters(order.price or ""),
-            order.timestamp,
-            order.expiresAt,
-            order.version or 1,
-            order.status,
-            EscapeDelimiters(order.pendingFulfiller or ""),
-            order.pendingTimestamp or 0
-        )
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Proceeding to send heartbeat with %d orders", #ordersToSend))
+    end
+    
+    -- Sort orders by priority: PENDING first, then newest ACTIVE
+    table.sort(ordersToSend, function(a, b)
+        -- Pending orders have highest priority
+        if a.status == Database.STATUS.PENDING and b.status ~= Database.STATUS.PENDING then
+            return true
+        elseif b.status == Database.STATUS.PENDING and a.status ~= Database.STATUS.PENDING then
+            return false
+        end
+        -- For same status, newest first
+        return (a.timestamp or 0) > (b.timestamp or 0)
+    end)
+    
+    -- Limit to most important orders for performance
+    if #ordersToSend > MAX_HEARTBEAT_ORDERS then
+        local limited = {}
+        for i = 1, MAX_HEARTBEAT_ORDERS do
+            table.insert(limited, ordersToSend[i])
+        end
+        ordersToSend = limited
+    end
+    
+    -- Send orders in batches (like sync system does)
+    local batches = math.ceil(#ordersToSend / BATCH_SIZE)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Creating %d batches for heartbeat", batches))
+    end
+    
+    for batchNum = 1, batches do
+        local startIdx = (batchNum - 1) * BATCH_SIZE + 1
+        local endIdx = math.min(batchNum * BATCH_SIZE, #ordersToSend)
         
-        Sync.QueueMessage(message)
+        local batchData = {}
+        local skippedCount = 0
+        
+        for i = startIdx, endIdx do
+            local order = ordersToSend[i]
+            local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d",
+                order.id,
+                order.type,
+                order.player,
+                EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
+                order.quantity or 0,
+                EscapeDelimiters(order.price or ""),
+                order.timestamp,
+                order.expiresAt,
+                order.version or 1,
+                order.status,
+                EscapeDelimiters(order.pendingFulfiller or ""),
+                order.pendingTimestamp or 0
+            )
+            
+            -- Removed verbose debug logging for order strings
+            
+            -- Check if adding this order would make the message too large
+            local testBatch = table.concat(batchData, ";")
+            if testBatch ~= "" then testBatch = testBatch .. ";" end
+            testBatch = testBatch .. orderStr
+            
+            local testMessage = string.format("%s|%d|%d|%d|%s",
+                MSG_TYPE.HEARTBEAT, PROTOCOL_VERSION, batchNum, batches, testBatch)
+            
+            -- Removed verbose debug logging for test messages
+            
+            local isValid, errorMsg = ValidateMessageSize(testMessage)
+            if isValid then
+                table.insert(batchData, orderStr)
+            else
+                skippedCount = skippedCount + 1
+                if Config.IsDebugMode() then
+                    print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Skipping oversized order in heartbeat: %s (%s)",
+                        order.id, order.itemName or "Unknown Item"))
+                end
+            end
+        end
+        
+        if skippedCount > 0 and not Config.IsDebugMode() then
+            print(string.format("|cffFFAA00[GuildWorkOrders]|r Warning: %d orders skipped in heartbeat due to size limits", skippedCount))
+        end
+        
+        -- Only send batch if it has orders
+        if #batchData > 0 then
+            local batchMessage = string.format("%s|%d|%d|%d|%s",
+                MSG_TYPE.HEARTBEAT,
+                PROTOCOL_VERSION,
+                batchNum,
+                batches,
+                table.concat(batchData, ";")
+            )
+            
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sending batch %d/%d with %d orders", 
+                    batchNum, batches, #batchData))
+            end
+            
+            local success = Sync.QueueMessage(batchMessage)
+            if Config.IsDebugMode() and not success then
+                print(string.format("|cffFF6B6B[GuildWorkOrders Debug]|r Failed to queue batch %d", batchNum))
+            end
+        else
+            if Config.IsDebugMode() then
+                print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Batch %d/%d has no orders to send", 
+                    batchNum, batches))
+            end
+        end
     end
     
     if Config.IsDebugMode() then
@@ -905,32 +1094,56 @@ end
 
 -- Handle heartbeat messages
 function Sync.HandleHeartbeat(parts, sender)
-    if #parts < 14 then return end
+    if #parts < 5 then return end
     
-    local orderData = {
-        id = parts[3],
-        type = parts[4],
-        player = parts[5],
-        itemLink = UnescapeDelimiters(parts[6]),
-        quantity = tonumber(parts[7]),
-        price = UnescapeDelimiters(parts[8]),
-        timestamp = tonumber(parts[9]) or GetCurrentTime(),
-        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 86400),
-        version = tonumber(parts[11]) or 1,
-        status = parts[12],
-        pendingFulfiller = UnescapeDelimiters(parts[13]),
-        pendingTimestamp = tonumber(parts[14]) or 0
-    }
+    local batchNum = tonumber(parts[3]) or 1
+    local totalBatches = tonumber(parts[4]) or 1
+    local batchData = parts[5]
     
-    -- Only accept heartbeat from the order creator
-    if orderData.player ~= sender then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
-                orderData.player, sender))
+    -- Parse batch of orders
+    local orderStrings = {strsplit(";", batchData)}
+    
+    for _, orderStr in ipairs(orderStrings) do
+        if orderStr and orderStr ~= "" then
+            local orderParts = {strsplit(":", orderStr)}
+            if #orderParts >= 12 then
+                local orderData = {
+                    id = orderParts[1],
+                    type = orderParts[2],
+                    player = orderParts[3],
+                    itemLink = UnescapeDelimiters(orderParts[4]),
+                    quantity = tonumber(orderParts[5]),
+                    price = UnescapeDelimiters(orderParts[6]),
+                    timestamp = tonumber(orderParts[7]) or GetCurrentTime(),
+                    expiresAt = tonumber(orderParts[8]) or (GetCurrentTime() + 86400),
+                    version = tonumber(orderParts[9]) or 1,
+                    status = orderParts[10],
+                    pendingFulfiller = UnescapeDelimiters(orderParts[11]),
+                    pendingTimestamp = tonumber(orderParts[12]) or 0
+                }
+                
+                -- Only accept heartbeat from the order creator
+                if orderData.player == sender then
+                    Sync.ProcessHeartbeatOrder(orderData, sender)
+                elseif Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
+                        orderData.player, sender))
+                end
+            end
         end
-        return
     end
     
+    -- Refresh UI after processing batch
+    if addon.UI and addon.UI.RefreshOrders then
+        addon.UI.RefreshOrders()
+        if addon.UI.UpdateStatusBar then
+            addon.UI.UpdateStatusBar()
+        end
+    end
+end
+
+-- Process individual order from heartbeat
+function Sync.ProcessHeartbeatOrder(orderData, sender)
     -- Extract item name from item link
     if orderData.itemLink and string.find(orderData.itemLink, "|H") then
         orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]")
@@ -981,14 +1194,6 @@ function Sync.HandleHeartbeat(parts, sender)
             end
         end
     end
-    
-    -- Refresh UI
-    if addon.UI and addon.UI.RefreshOrders then
-        addon.UI.RefreshOrders()
-        if addon.UI.UpdateStatusBar then
-            addon.UI.UpdateStatusBar()
-        end
-    end
 end
 
 -- Start periodic heartbeat timer
@@ -1000,11 +1205,17 @@ function Sync.StartHeartbeat()
     
     -- Send heartbeat every 45 seconds
     heartbeatTimer = C_Timer.NewTicker(45, function()
+        if Config.IsDebugMode() then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Heartbeat timer triggered")
+        end
         Sync.SendHeartbeat()
     end)
     
     -- Send initial heartbeat after 5 seconds
     C_Timer.After(5, function()
+        if Config.IsDebugMode() then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Initial heartbeat triggered")
+        end
         Sync.SendHeartbeat()
     end)
     
