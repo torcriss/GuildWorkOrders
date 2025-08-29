@@ -36,7 +36,8 @@ local MSG_TYPE = {
     FULFILL_REQUEST = "FULFILL_REQ",  -- Request to fulfill an order
     FULFILL_ACCEPT = "FULFILL_ACC",   -- Creator accepts fulfillment
     FULFILL_REJECT = "FULFILL_REJ",   -- Creator rejects fulfillment  
-    HEARTBEAT = "HEARTBEAT"           -- Periodic broadcast of creator's orders
+    HEARTBEAT = "HEARTBEAT",          -- Periodic broadcast of creator's orders
+    CLEAR_ALL = "CLEAR_ALL"           -- Admin clear all orders command
 }
 
 -- State tracking
@@ -162,6 +163,8 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
         Sync.HandleFulfillReject(parts, sender)
     elseif msgType == MSG_TYPE.HEARTBEAT then
         Sync.HandleHeartbeat(parts, sender)
+    elseif msgType == MSG_TYPE.CLEAR_ALL then
+        Sync.HandleClearAll(parts, sender)
     end
 end
 
@@ -290,6 +293,15 @@ function Sync.HandleNewOrder(parts, sender)
         status = Database.STATUS.ACTIVE
     }
     
+    -- Check if this order was created before the last global clear
+    if Database.IsOrderPreClear(orderData.timestamp) then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring pre-clear order: %s (timestamp: %d)", 
+                orderData.id, orderData.timestamp))
+        end
+        return
+    end
+    
     -- Extract item name from item link for proper display
     if orderData.itemLink and string.find(orderData.itemLink, "|H") then
         orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]")
@@ -392,10 +404,11 @@ end
 
 -- Request sync from other users
 function Sync.RequestSync()
-    local message = string.format("%s|%d|%d",
+    local message = string.format("%s|%d|%d|%d",
         MSG_TYPE.SYNC_REQUEST,
         PROTOCOL_VERSION,
-        GuildWorkOrdersDB.syncData.lastSync or 0
+        GuildWorkOrdersDB.syncData.lastSync or 0,
+        Database.GetGlobalClearTimestamp()
     )
     
     Sync.QueueMessage(message)
@@ -423,6 +436,27 @@ end
 -- Handle sync request
 function Sync.HandleSyncRequest(parts, sender)
     local theirLastSync = tonumber(parts[3]) or 0
+    local theirClearTimestamp = tonumber(parts[4]) or 0
+    local myClearTimestamp = Database.GetGlobalClearTimestamp()
+    
+    -- If their clear timestamp is older than mine, send them a clear all message first
+    if theirClearTimestamp < myClearTimestamp then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sending clear event to %s (their: %d, mine: %d)", 
+                sender, theirClearTimestamp, myClearTimestamp))
+        end
+        
+        local _, clearedBy = Database.GetLastClearInfo()
+        local clearMessage = string.format("%s|%d|%d|%s",
+            MSG_TYPE.CLEAR_ALL,
+            PROTOCOL_VERSION,
+            myClearTimestamp,
+            clearedBy or UnitName("player")
+        )
+        Sync.QueueMessage(clearMessage, sender)
+        return
+    end
+    
     local orders = Database.ExportOrdersForSync()
     
     -- Filter orders newer than their last sync
@@ -585,7 +619,13 @@ function Sync.HandleSyncBatch(parts, sender)
                 orderData.priceInCopper = Database.ParsePriceToCopper(orderData.price)
             end
             
-            Database.SyncOrder(orderData)
+            -- Check if this order was created before the last global clear
+            if not Database.IsOrderPreClear(orderData.timestamp) then
+                Database.SyncOrder(orderData)
+            elseif Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring pre-clear sync batch order: %s (timestamp: %d)", 
+                    orderData.id, orderData.timestamp))
+            end
             orderCount = orderCount + 1
         end
     end
@@ -1171,6 +1211,15 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
     -- Add price in copper for sorting
     orderData.priceInCopper = Database.ParsePriceToCopper(orderData.price)
     
+    -- Check if this order was created before the last global clear
+    if Database.IsOrderPreClear(orderData.timestamp) then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring pre-clear heartbeat order: %s (timestamp: %d)", 
+                orderData.id, orderData.timestamp))
+        end
+        return
+    end
+    
     -- Handle different order statuses
     if orderData.status == Database.STATUS.EXPIRED or orderData.status == Database.STATUS.FULFILLED or orderData.status == Database.STATUS.CANCELLED then
         -- Remove from active orders if we have it
@@ -1233,5 +1282,66 @@ function Sync.StopHeartbeat()
         if Config.IsDebugMode() then
             print("|cff00ff00[GuildWorkOrders Debug]|r Stopped heartbeat system")
         end
+    end
+end
+
+-- Handle admin clear all command
+function Sync.HandleClearAll(parts, sender)
+    if #parts < 3 then return end
+    
+    local clearTimestamp = tonumber(parts[3])
+    local clearedBy = parts[4] or sender
+    if not clearTimestamp then return end
+    
+    local currentClearTimestamp = Database.GetGlobalClearTimestamp()
+    
+    -- Only process if this is a newer clear event
+    if clearTimestamp > currentClearTimestamp then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received admin clear from %s (timestamp: %d)", clearedBy, clearTimestamp))
+        end
+        
+        -- Set the new clear timestamp with clearer's name
+        Database.SetGlobalClearTimestamp(clearTimestamp, clearedBy)
+        
+        -- Clear all orders
+        if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+            GuildWorkOrdersDB.orders = {}
+        end
+        
+        -- Refresh UI
+        if addon.UI and addon.UI.RefreshOrders then
+            addon.UI.RefreshOrders()
+            if addon.UI.UpdateStatusBar then
+                addon.UI.UpdateStatusBar()
+            end
+        end
+        
+        print("|cffFFAA00[GuildWorkOrders]|r All orders have been cleared by guild admin")
+    end
+end
+
+-- Broadcast clear all command to guild
+function Sync.BroadcastClearAll(callback)
+    local clearTimestamp = GetCurrentTime()
+    local clearedBy = UnitName("player")
+    Database.SetGlobalClearTimestamp(clearTimestamp, clearedBy)
+    
+    local message = string.format("%s|%d|%d|%s",
+        MSG_TYPE.CLEAR_ALL,
+        PROTOCOL_VERSION,
+        clearTimestamp,
+        clearedBy
+    )
+    
+    Sync.QueueMessage(message)
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting clear all (timestamp: %d, by: %s)", clearTimestamp, clearedBy))
+    end
+    
+    -- Call callback immediately for now - in a real implementation you might want to wait for confirmations
+    if callback then
+        callback()
     end
 end

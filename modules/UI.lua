@@ -314,9 +314,9 @@ function UI.CreateColumnHeaders()
             {text = "Price", width = 60, x = 300},
             {text = "Buyer", width = 70, x = 375},
             {text = "Seller", width = 70, x = 460},
-            {text = "Time", width = 50, x = 545},
+            {text = "Remaining", width = 50, x = 545},
             {text = "Status", width = 70, x = 610},
-            {text = "Completed (Server)", width = 90, x = 695}
+            {text = "Date", width = 90, x = 695}
         }
     else
         headers = {
@@ -326,7 +326,7 @@ function UI.CreateColumnHeaders()
             {text = "Price", width = 60, x = 300},
             {text = "Buyer", width = 70, x = 375},
             {text = "Seller", width = 70, x = 460},
-            {text = "Time", width = 50, x = 545},
+            {text = "Remaining", width = 50, x = 545},
             {text = "Action", width = 60, x = 610}
         }
     end
@@ -773,6 +773,47 @@ function UI.CreateStatusBar()
     syncText:SetText("Last sync: Never")
     UI.syncText = syncText
     
+    -- Admin Clear button
+    local adminBtn = CreateFrame("Button", nil, statusBar)
+    adminBtn:SetSize(50, 18)
+    adminBtn:SetPoint("CENTER", statusBar, "CENTER", 0, 0)
+    
+    -- Create text
+    local adminText = adminBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    adminText:SetPoint("CENTER")
+    adminText:SetText("Admin")
+    adminText:SetTextColor(1, 0.3, 0.3) -- Red text
+    
+    -- Custom styling for admin button
+    local adminBg = adminBtn:CreateTexture(nil, "BACKGROUND")
+    adminBg:SetAllPoints()
+    adminBg:SetColorTexture(0.3, 0.1, 0.1, 0.8) -- Dark red background
+    
+    adminBtn:SetScript("OnEnter", function(self)
+        adminBg:SetColorTexture(0.5, 0.2, 0.2, 0.9) -- Lighter red on hover
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Admin Clear", 1, 0.3, 0.3)
+        GameTooltip:AddLine("Clear all orders guild-wide", 1, 1, 1)
+        GameTooltip:AddLine("Requires password", 1, 1, 0)
+        GameTooltip:Show()
+    end)
+    
+    adminBtn:SetScript("OnLeave", function(self)
+        adminBg:SetColorTexture(0.3, 0.1, 0.1, 0.8) -- Back to normal
+        GameTooltip:Hide()
+    end)
+    
+    adminBtn:SetScript("OnClick", function()
+        UI.ShowAdminPasswordDialog()
+    end)
+    
+    UI.adminBtn = adminBtn
+    
+    -- Last clear info
+    local clearText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    clearText:SetPoint("RIGHT", -220, 0)
+    clearText:SetText("Last clear: Never")
+    UI.clearText = clearText
     
     -- Order count
     local countText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -863,6 +904,20 @@ function UI.UpdateStatusBar()
     end
     UI.syncText:SetText("Last sync: " .. syncText)
     
+    -- Update last clear info
+    if UI.clearText and Database then
+        local clearTimestamp, clearedBy = Database.GetLastClearInfo()
+        local clearText = "Never"
+        if clearTimestamp > 0 and clearedBy then
+            local timeAgo = UI.GetTimeAgo(clearTimestamp)
+            if timeAgo == "Now" then
+                clearText = string.format("by %s", clearedBy)
+            else
+                clearText = string.format("%s ago by %s", timeAgo, clearedBy)
+            end
+        end
+        UI.clearText:SetText("|cffFF6B6BLast clear: " .. clearText .. "|r")
+    end
     
     -- Update order counts
     local activeOrders = Database.GetAllOrders()  -- Gets only active orders
@@ -1528,3 +1583,69 @@ function UI.UpdateOrderRowButton(row, order)
         row.actionButton:Hide()
     end
 end
+
+-- Show admin password dialog
+function UI.ShowAdminPasswordDialog()
+    StaticPopup_Show("GWO_ADMIN_PASSWORD")
+end
+
+-- Admin password dialog
+StaticPopupDialogs["GWO_ADMIN_PASSWORD"] = {
+    text = "|cffFF6B6B[!] ADMIN ACCESS [!]|r\n\nEnter admin password to clear all orders:",
+    button1 = "Clear All",
+    button2 = "Cancel",
+    hasEditBox = true,
+    maxLetters = 20,
+    OnShow = function(self)
+        self.editBox:SetFocus()
+        self.editBox:SetText("")
+        self.editBox:SetSecurityMode(true) -- Hide password characters
+    end,
+    OnAccept = function(self)
+        local password = self.editBox:GetText()
+        local success, errorMsg = Config.CheckAdminAccess(password)
+        
+        if success then
+            -- Show final confirmation dialog
+            StaticPopup_Show("GWO_ADMIN_CONFIRM")
+        else
+            print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg))
+            -- Clear the password field
+            self.editBox:SetText("")
+        end
+    end,
+    EditBoxOnEscapePressed = function(self)
+        self:GetParent():Hide()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
+
+-- Final admin confirmation dialog
+StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
+    text = "|cffFF6B6B[!] FINAL WARNING [!]|r\n\nThis will clear ALL orders for ALL guild members!\n\n|cffFFAA00This action:|r\n• Clears all active orders globally\n• Notifies all addon users\n• Cannot be undone\n\n|cffFF6B6BAre you absolutely sure?|r",
+    button1 = "YES, CLEAR ALL",
+    button2 = "Cancel",
+    OnAccept = function()
+        if addon.Sync and addon.Sync.BroadcastClearAll then
+            print("|cffFFAA00[GuildWorkOrders]|r Initiating admin clear...")
+            addon.Sync.BroadcastClearAll(function()
+                -- After clear all is broadcast, clear local database
+                Database.ClearAllData()
+                print("|cff00ff00[GuildWorkOrders]|r Admin clear completed! All orders cleared globally.")
+                
+                -- Refresh UI if open
+                if mainFrame and mainFrame:IsShown() then
+                    UI.RefreshOrders()
+                    UI.UpdateStatusBar()
+                end
+            end)
+        else
+            print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}

@@ -162,3 +162,53 @@ end
 function Config.GetAnnounceFormat()
     return config.announceFormat or "simple"
 end
+
+-- Simple hash function for password verification
+local function SimpleHash(str)
+    if not str or str == "" then return 0 end
+    
+    local hash = 5381
+    for i = 1, string.len(str) do
+        local char = string.byte(str, i)
+        hash = ((hash * 33) + char) % 2147483647 -- Keep within 32-bit signed int range
+    end
+    return hash
+end
+
+-- Pre-computed hash for admin password "0000"
+local ADMIN_HASH = 2088252487
+
+-- Verify admin password
+function Config.VerifyAdminPassword(password)
+    local hash = SimpleHash(password or "")
+    return hash == ADMIN_HASH
+end
+
+-- Failed attempt tracking
+local failedAttempts = 0
+local lastFailTime = 0
+
+function Config.CheckAdminAccess(password)
+    local currentTime = GetTime()
+    
+    -- Check lockout (30 seconds after 3 failed attempts)
+    if failedAttempts >= 3 and (currentTime - lastFailTime) < 30 then
+        return false, string.format("Too many failed attempts. Try again in %d seconds.", 
+            math.ceil(30 - (currentTime - lastFailTime)))
+    end
+    
+    -- Reset attempts after lockout expires
+    if failedAttempts >= 3 and (currentTime - lastFailTime) >= 30 then
+        failedAttempts = 0
+    end
+    
+    -- Verify password
+    if Config.VerifyAdminPassword(password) then
+        failedAttempts = 0
+        return true
+    else
+        failedAttempts = failedAttempts + 1
+        lastFailTime = currentTime
+        return false, "Incorrect password"
+    end
+end

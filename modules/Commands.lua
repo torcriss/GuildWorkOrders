@@ -14,7 +14,6 @@ local Parser = nil
 local COMMAND_LIST = {
     {cmd = "", desc = "Open the work orders window"},
     {cmd = "minimap", desc = "Toggle minimap button"},
-    {cmd = "clear", desc = "Clear all orders and history (with confirmation)"},
     {cmd = "sync", desc = "Force sync with guild members"},
     {cmd = "debug", desc = "Toggle debug mode"},
     {cmd = "stats", desc = "Show addon statistics"}
@@ -42,8 +41,6 @@ function Commands.HandleSlashCommand(input)
     
     if cmd == "minimap" then
         Commands.ToggleMinimapButton()
-    elseif cmd == "clear" then
-        Commands.ClearDatabase()
     elseif cmd == "sync" then
         Commands.ForceSync()
     elseif cmd == "debug" then
@@ -80,33 +77,6 @@ function Commands.HideUI()
     end
 end
 
--- Clear database with confirmation
-function Commands.ClearDatabase()
-    StaticPopup_Show("GWO_CLEAR_DATABASE")
-end
-
--- StaticPopup for database clearing
-StaticPopupDialogs["GWO_CLEAR_DATABASE"] = {
-    text = "Are you sure you want to clear all orders and history?\n\nThis will remove:\n- All active orders\n- All order history\n- Reset sync data\n\nThis action cannot be undone!",
-    button1 = "Yes, Clear All",
-    button2 = "Cancel",
-    OnAccept = function()
-        if Database then
-            Database.ClearAllData()
-            print("|cff00ff00[GuildWorkOrders]|r Database cleared successfully! All orders and history have been removed.")
-            -- Refresh UI if open
-            if UI then
-                UI.RefreshOrders()
-                UI.UpdateStatusBar()
-            end
-        else
-            print("|cffff0000[GuildWorkOrders]|r Error: Database module not available")
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-}
 
 function Commands.ToggleUI()
     if UI then

@@ -434,6 +434,62 @@ function Database.ClearHistory()
     return true
 end
 
+-- Broadcast cancellation of all orders to all users (admin function)
+function Database.BroadcastClearAll(callback)
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        if callback then callback() end
+        return true
+    end
+    
+    local orders = {}
+    for orderID, order in pairs(GuildWorkOrdersDB.orders) do
+        table.insert(orders, {id = orderID, version = (order.version or 1) + 1})
+    end
+    
+    local totalOrders = #orders
+    if totalOrders == 0 then
+        print("|cff00ff00[GuildWorkOrders]|r No active orders to cancel")
+        if callback then callback() end
+        return true
+    end
+    
+    print(string.format("|cffFFAA00[GuildWorkOrders]|r Broadcasting cancellation of %d orders to all users...", totalOrders))
+    
+    -- Broadcast cancellations with rate limiting (5 per second to avoid spam)
+    local currentIndex = 1
+    local broadcastTimer
+    
+    local function broadcastNext()
+        if currentIndex <= totalOrders then
+            local order = orders[currentIndex]
+            
+            -- Broadcast cancellation
+            if addon.Sync then
+                addon.Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, order.version, "Admin Clear")
+            end
+            
+            -- Update progress every 10 orders
+            if currentIndex % 10 == 0 or currentIndex == totalOrders then
+                print(string.format("|cffFFAA00[GuildWorkOrders]|r Cancelled %d/%d orders...", currentIndex, totalOrders))
+            end
+            
+            currentIndex = currentIndex + 1
+        else
+            -- All orders broadcast, cleanup and callback
+            if broadcastTimer then
+                broadcastTimer:Cancel()
+            end
+            print("|cff00ff00[GuildWorkOrders]|r All order cancellations broadcast successfully")
+            if callback then callback() end
+        end
+    end
+    
+    -- Start broadcasting with 200ms delay between each (5 per second)
+    broadcastTimer = C_Timer.NewTicker(0.2, broadcastNext)
+    
+    return true
+end
+
 -- Clear all database data (orders, history, keep config)
 function Database.ClearAllData()
     if not GuildWorkOrdersDB then
@@ -585,6 +641,48 @@ function Database.GetActiveOrderCount()
     end
     
     return count
+end
+
+-- Get the global clear timestamp 
+function Database.GetGlobalClearTimestamp()
+    if not GuildWorkOrdersDB then
+        GuildWorkOrdersDB = {}
+    end
+    if not GuildWorkOrdersDB.syncData then
+        GuildWorkOrdersDB.syncData = {}
+    end
+    return GuildWorkOrdersDB.syncData.lastClear or 0
+end
+
+-- Set the global clear timestamp
+function Database.SetGlobalClearTimestamp(timestamp, clearedBy)
+    if not GuildWorkOrdersDB then
+        GuildWorkOrdersDB = {}
+    end
+    if not GuildWorkOrdersDB.syncData then
+        GuildWorkOrdersDB.syncData = {}
+    end
+    GuildWorkOrdersDB.syncData.lastClear = timestamp or GetCurrentTime()
+    GuildWorkOrdersDB.syncData.clearedBy = clearedBy or UnitName("player")
+    
+    if Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Set global clear timestamp: %d by %s", 
+            GuildWorkOrdersDB.syncData.lastClear, GuildWorkOrdersDB.syncData.clearedBy))
+    end
+end
+
+-- Get the last clear info (timestamp and who cleared)
+function Database.GetLastClearInfo()
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.syncData then
+        return 0, nil
+    end
+    return GuildWorkOrdersDB.syncData.lastClear or 0, GuildWorkOrdersDB.syncData.clearedBy
+end
+
+-- Check if an order was created before the last global clear
+function Database.IsOrderPreClear(orderTimestamp)
+    local clearTimestamp = Database.GetGlobalClearTimestamp()
+    return clearTimestamp > 0 and (orderTimestamp or 0) < clearTimestamp
 end
 
 -- Purge non-active orders from history to make room for new orders
