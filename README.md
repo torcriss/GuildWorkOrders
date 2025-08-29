@@ -54,6 +54,8 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 
 ### Admin Management
 Access the password-protected admin clear system:
+
+**Full Clear (All Orders):**
 - **Admin Button** - Red "Admin" button in the UI status bar
 - **Password**: `0000` (hashed and secured)
 - **Two-Step Process**: Password entry + final confirmation
@@ -61,9 +63,16 @@ Access the password-protected admin clear system:
 - **Full Tracking**: Shows "Last clear: X ago by PlayerName" in status bar
 - **Offline Protection**: Users who missed the clear get updated when they return
 
+**Single Order Clear:**
+- **Individual "X" Buttons** - Red "X" button next to each order on all tabs
+- **Same Password**: Uses `0000` password with same security system
+- **Selective Clearing**: Remove specific problematic orders without affecting others
+- **Universal Access**: Available on Buy Orders, Sell Orders, My Orders, and History tabs
+- **Smart Positioning**: Buttons positioned to avoid overlapping columns
+
 **Security Features**:
 - Failed attempt lockout (30 seconds after 3 tries)
-- Password characters hidden during input
+- Password authentication for all admin actions
 - Multiple confirmation dialogs with warnings
 - Real-time status updates across all guild members
 
@@ -175,9 +184,35 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.2.1** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.3.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.2.1)
+## Recent Updates (v2.3.0)
+
+### 🔐 Single Order Admin Clear System
+- **Individual Order Clearing** - Admins can now clear specific orders with password protection
+- **Multi-Status Support** - Clear active, pending, and cancelled orders individually
+- **Universal Access** - Admin clear "X" buttons on all tabs (Buy, Sell, My Orders, History)
+- **Two-Step Security** - Password entry + confirmation dialog (same password "0000")
+- **Global Synchronization** - Cleared orders removed instantly across all guild members
+
+### 🎨 Enhanced UI Management
+- **Smart Button Positioning** - Red "X" buttons positioned to avoid column overlaps
+- **Cancelled Order Support** - Clear cancelled orders from My Orders tab
+- **History Tab Access** - Full admin clear functionality in History tab
+- **Improved Layout** - Clean positioning after status text and date columns
+
+### 🛠️ Technical Improvements
+- **CLEAR_SINGLE Protocol** - New message type for individual order management
+- **Dual Database Search** - Looks in both active orders and history for comprehensive clearing
+- **Classic Era Compatibility** - Fixed SetSecurityMode and texture access issues
+- **Self-Message Processing** - Admins process their own clear messages for immediate updates
+
+### 🔧 Bug Fixes
+- **Database Structure** - Fixed hash table vs array lookup for cancelled orders
+- **Order Access** - Resolved cancelled orders being inaccessible for clearing
+- **Error Handling** - Improved stability with missing functions and invalid states
+
+## Previous Updates (v2.2.1)
 
 ### 🛠️ Minor Fixes
 - **Fixed Item Field Tooltip** - Removed incorrect "Type item names manually" suggestion
