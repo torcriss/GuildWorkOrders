@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.1.1"
-addon.build = "Fixed Message Size Validation and Escape Sequences"
+addon.version = "2.2.1"
+addon.build = "Password-Protected Admin System & UI Improvements"
 
 -- Core initialization
 local function Initialize()
