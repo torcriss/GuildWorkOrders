@@ -175,9 +175,16 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.2.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.2.1** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.2.0)
+## Recent Updates (v2.2.1)
+
+### 🛠️ Minor Fixes
+- **Fixed Item Field Tooltip** - Removed incorrect "Type item names manually" suggestion
+- **Improved User Experience** - Tooltip now only shows functional item selection methods
+- **UI Polish** - Better guidance for new users on how to select items
+
+## Previous Updates (v2.2.0)
 
 ### 🔐 Password-Protected Admin System
 - **Admin Clear Button** - Secure admin clear functionality in UI with password protection
