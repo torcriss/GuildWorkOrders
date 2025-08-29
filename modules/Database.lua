@@ -235,12 +235,12 @@ function Database.GetMyCreatedOrders()
         end
     end
     
-    -- Get recently completed orders I created (from history) - only within last 5 minutes
+    -- Get recently completed orders I created (from history) - only within last 24 hours
     local currentTime = GetCurrentTime()
     local history = Database.GetHistory()
     for _, order in ipairs(history) do
         if order.player == playerName then
-            -- Only include recently completed orders (within 5 minutes)
+            -- Only include recently completed orders (within 24 hours)
             local timeSinceCompleted = nil
             if order.completedAt then
                 timeSinceCompleted = currentTime - order.completedAt
@@ -250,7 +250,7 @@ function Database.GetMyCreatedOrders()
                 timeSinceCompleted = currentTime - order.expiredAt
             end
             
-            if timeSinceCompleted and timeSinceCompleted < 300 then -- 5 minutes
+            if timeSinceCompleted and timeSinceCompleted < 86400 then -- 24 hours
                 table.insert(myOrders, order)
             end
         end

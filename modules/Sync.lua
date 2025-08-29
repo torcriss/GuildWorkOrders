@@ -997,15 +997,15 @@ function Sync.SendHeartbeat()
             print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s", order.id or "unknown", order.status or "unknown"))
         end
         
-        -- Include active, pending orders and recently completed (5 minute window)
+        -- Include active, pending orders and recently completed (24 hour window)
         if order.status == Database.STATUS.ACTIVE or 
            order.status == Database.STATUS.PENDING or
            (order.status == Database.STATUS.EXPIRED and 
-            order.expiredAt and currentTime - order.expiredAt < 300) or
+            order.expiredAt and currentTime - order.expiredAt < 86400) or
            (order.status == Database.STATUS.FULFILLED and 
-            order.fulfilledAt and currentTime - order.fulfilledAt < 300) or
+            order.fulfilledAt and currentTime - order.fulfilledAt < 86400) or
            (order.status == Database.STATUS.CANCELLED and 
-            order.completedAt and currentTime - order.completedAt < 300) then
+            order.completedAt and currentTime - order.completedAt < 86400) then
             
             table.insert(ordersToSend, order)
             if Config.IsDebugMode() then
@@ -1260,8 +1260,8 @@ function Sync.StartHeartbeat()
         heartbeatTimer:Cancel()
     end
     
-    -- Send heartbeat every 45 seconds
-    heartbeatTimer = C_Timer.NewTicker(45, function()
+    -- Send heartbeat every 30 seconds
+    heartbeatTimer = C_Timer.NewTicker(30, function()
         if Config.IsDebugMode() then
             print("|cff00ff00[GuildWorkOrders Debug]|r Heartbeat timer triggered")
         end

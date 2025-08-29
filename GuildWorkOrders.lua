@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.3.0"
-addon.build = "Single Order Admin Clear & Enhanced Management"
+addon.version = "2.4.0"
+addon.build = "Sync & Heartbeat Timing Optimizations"
 
 -- Core initialization
 local function Initialize()
@@ -40,8 +40,8 @@ local function Initialize()
         end)
     end
     
-    -- Frequent auto-sync timer (every 3 minutes)
-    C_Timer.NewTicker(180, function()
+    -- Frequent auto-sync timer (every 1 minute)
+    C_Timer.NewTicker(60, function()
         if addon.Sync then
             addon.Sync.RequestSync()
             addon.Sync.SendPing()
