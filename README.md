@@ -81,8 +81,10 @@ Access the password-protected admin clear system:
 ### Synchronization
 - Orders are synchronized between guild members using hidden addon messages
 - No guild chat spam - all communication is invisible to non-addon users
-- **Heartbeat System** - Periodic broadcasts ensure all users stay synchronized
+- **Heartbeat System** - 30-second periodic broadcasts ensure all users stay synchronized
+- **Auto-Sync** - Automatic synchronization every 60 seconds for enhanced reliability
 - **Advanced Conflict Resolution** - Version-based conflict resolution with timestamps
+- **Extended History Sync** - Completed orders synchronized for 24 hours for better visibility
 - **Message Size Validation** - Prevents sync failures with legendary items and long names  
 - **Rate Limiting** - Prevents flooding (max 5 messages per second with intelligent batching)
 
@@ -184,9 +186,29 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.3.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.4.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.3.0)
+## Recent Updates (v2.4.0)
+
+### ⚡ Sync & Heartbeat Timing Optimizations
+- **Faster Heartbeats** - Reduced from 45 seconds to 30 seconds for quicker order updates
+- **More Frequent Sync** - Auto-sync every 1 minute instead of 3 minutes for better reliability
+- **Extended History** - Completed orders now broadcast for 24 hours instead of 5 minutes
+- **Stable User Tracking** - Maintained 5-minute online user detection for optimal balance
+
+### 🚀 Real-Time Experience Improvements
+- **Immediate Updates** - Orders appear in guild members' UIs within 30 seconds
+- **Better History Visibility** - Completed orders stay synchronized for a full day
+- **Responsive Status Changes** - Order updates propagate much faster between users
+- **Enhanced Trading Awareness** - Better visibility into recent guild trading patterns
+
+### 🎯 Performance Impact
+- **33% faster heartbeat updates** (45s → 30s)
+- **300% more frequent synchronization** (180s → 60s)
+- **28,800% longer order history retention** (5min → 24h)
+- **Maintained stable online detection** (5min buffer)
+
+## Previous Updates (v2.3.0)
 
 ### 🔐 Single Order Admin Clear System
 - **Individual Order Clearing** - Admins can now clear specific orders with password protection

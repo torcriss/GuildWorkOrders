@@ -197,18 +197,17 @@ function Database.GetMyOrders()
     local playerName = UnitName("player")
     local myOrders = {}
     
-    -- Get active orders
-    local allOrders = Database.GetAllOrders()
-    for _, order in ipairs(allOrders) do
-        if order.player == playerName then
-            table.insert(myOrders, order)
-        end
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        return {}
     end
     
-    -- Get completed/cancelled orders from history
-    local history = Database.GetHistory()
-    for _, order in ipairs(history) do
-        if order.player == playerName then
+    -- Get only my active and pending orders from the active database
+    for id, order in pairs(GuildWorkOrdersDB.orders) do
+        if order.player == playerName and 
+           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) and
+           order.expiresAt > GetCurrentTime() then
+            -- Clean up any corrupted item names
+            Database.CleanItemName(order)
             table.insert(myOrders, order)
         end
     end

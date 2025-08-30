@@ -525,6 +525,8 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
+        elseif order.status == Database.STATUS.EXPIRED then
+            statusText:SetText("|cffFFD700Expired|r")
         else
             statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
         end
@@ -593,6 +595,8 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cff00ff00Completed|r")
             elseif order.status == Database.STATUS.CANCELLED then
                 statusText:SetText("|cffff8080Cancelled|r")
+            elseif order.status == Database.STATUS.EXPIRED then
+                statusText:SetText("|cffFFD700Expired|r")
             else
                 statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
             end
