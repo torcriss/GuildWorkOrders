@@ -186,9 +186,26 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.4.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.4.1** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.4.0)
+## Recent Updates (v2.4.1)
+
+### 🔧 My Orders Tab Improvements
+- **Expired Orders Cleanup** - Fixed expired orders appearing in My Orders tab with non-functional Cancel buttons
+- **Smart Filtering** - My Orders tab now only shows orders you can actively manage (ACTIVE and PENDING status)
+- **Proper Organization** - EXPIRED, FULFILLED, and CANCELLED orders now only appear in History tab where they belong
+
+### 🎨 Enhanced Status Display  
+- **Consistent Capitalization** - Fixed "expired" → "Expired" in History tab display
+- **UI Consistency** - Improved status text formatting across all order displays
+- **Better Visual Hierarchy** - Status displays are now consistent and properly capitalized
+
+### 🚀 User Experience Improvements
+- **Cleaner My Orders** - No more confusion with completed orders showing Cancel buttons
+- **Clear Separation** - Active orders (manageable) vs completed orders (historical) properly separated
+- **Intuitive Interface** - More polished and user-friendly order management
+
+## Previous Updates (v2.4.0)
 
 ### ⚡ Sync & Heartbeat Timing Optimizations
 - **Faster Heartbeats** - Reduced from 45 seconds to 30 seconds for quicker order updates
