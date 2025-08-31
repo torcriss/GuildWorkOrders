@@ -1312,9 +1312,14 @@ function Sync.HandleClearAll(parts, sender)
         -- Set the new clear timestamp with clearer's name
         Database.SetGlobalClearTimestamp(clearTimestamp, clearedBy)
         
-        -- Clear all orders
-        if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
-            GuildWorkOrdersDB.orders = {}
+        -- Clear all orders and history (like ClearAllData does)
+        if GuildWorkOrdersDB then
+            if GuildWorkOrdersDB.orders then
+                GuildWorkOrdersDB.orders = {}
+            end
+            if GuildWorkOrdersDB.history then
+                GuildWorkOrdersDB.history = {}
+            end
         end
         
         -- Refresh UI
@@ -1366,9 +1371,9 @@ function Sync.HandleClearSingle(parts, sender)
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received single order clear from %s (order: %s)", clearedBy, orderID))
     end
     
-    -- Clear the specific order
+    -- Clear the specific order (ensure orderID is string for proper matching)
     if Database then
-        Database.ClearSingleOrder(orderID, clearedBy)
+        Database.ClearSingleOrder(tostring(orderID), clearedBy)
     end
     
     -- Refresh UI

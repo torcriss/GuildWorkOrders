@@ -1832,8 +1832,16 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM_SINGLE"] = {
         if addon.Sync and addon.Sync.BroadcastClearSingle then
             print(string.format("|cffFFAA00[GuildWorkOrders]|r Clearing order: %s", order.itemName or "Unknown Item"))
             addon.Sync.BroadcastClearSingle(tostring(order.id), function()
-                -- UI refresh handled by HandleClearSingle when broadcast message is received
-                print("|cff00ff00[GuildWorkOrders]|r Order clear broadcast sent!")
+                -- Clear locally immediately (like clear all does)
+                Database.ClearSingleOrder(tostring(order.id), UnitName("player"))
+                
+                -- Refresh UI immediately
+                if mainFrame and mainFrame:IsShown() then
+                    UI.RefreshOrders()
+                    UI.UpdateStatusBar()
+                end
+                
+                print("|cff00ff00[GuildWorkOrders]|r Order cleared!")
             end)
         else
             print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
