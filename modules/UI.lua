@@ -1060,7 +1060,7 @@ function UI.UpdateStatusBar()
     if Sync.GetOnlineUserCount then
         onlineCount = Sync.GetOnlineUserCount()
     end
-    UI.onlineText:SetText(string.format("|cff00ff00• Online: %d|r", onlineCount))
+    UI.onlineText:SetText(string.format("|cff00ff00• Online: %d|r", onlineCount + 1))
     
     -- Update sync status
     local syncStatus = {}
@@ -1132,13 +1132,13 @@ function UI.ShowOnlineTooltip(frame)
         local users = Sync.GetOnlineUsers()
         local count = 0
         for user, info in pairs(users) do
-            GameTooltip:AddLine(string.format("%s (v%d)", user, info.version))
             count = count + 1
         end
         
-        if count == 0 then
-            GameTooltip:AddLine("|cff888888No other users online|r")
-        end
+        -- Add 1 to include the current user
+        local totalCount = count + 1
+        
+        GameTooltip:AddLine(string.format("|cff00ff00Total: %d users online|r", totalCount))
     else
         GameTooltip:AddLine("|cff888888Sync not initialized|r")
     end
