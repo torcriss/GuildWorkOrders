@@ -619,47 +619,7 @@ function UI.CreateOrderRow(order, index)
             end
         end
         
-        -- Only show admin clear for specific statuses (not for completed orders that are already cleared)
-        if order.status == Database.STATUS.CANCELLED then
-            local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            adminClearBtn:SetSize(20, 20)
-            adminClearBtn:SetPoint("LEFT", 790, 0)  -- Fixed position since completedText may not exist
-            adminClearBtn:SetText("×")
-            
-            -- Style the button (red background)
-            if adminClearBtn:GetNormalTexture() then
-                adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.1, 0.1, 1)
-            end
-            if adminClearBtn:GetHighlightTexture() then
-                adminClearBtn:GetHighlightTexture():SetColorTexture(1.0, 0.2, 0.2, 1)
-            end
-            if adminClearBtn:GetPushedTexture() then
-                adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
-            end
-            
-            -- Set font color to white
-            local btnText = adminClearBtn:GetFontString()
-            if btnText then
-                btnText:SetTextColor(1, 1, 1, 1)
-            end
-            
-            -- Add tooltip
-            adminClearBtn:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
-                GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
-                GameTooltip:Show()
-            end)
-            adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
-            
-            -- Click handler - prompt for admin password
-            adminClearBtn:SetScript("OnClick", function()
-                UI.ConfirmAdminClearSingle(order)
-            end)
-            
-            -- Store reference for cleanup
-            row.adminClearButton = adminClearBtn
-        end
+        -- Cancelled orders cannot be admin cleared (they are already resolved)
     else
         local playerName = UnitName("player")
         
