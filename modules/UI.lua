@@ -506,7 +506,7 @@ function UI.CreateOrderRow(order, index)
         else
             timeText:SetText("|cffff0000Expired|r")
         end
-    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED or order.status == Database.STATUS.CLEARED then
         -- Show "-" for completed orders to avoid timestamp fluctuations
         timeText:SetText("|cff888888-|r")
     else
@@ -527,6 +527,8 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cffff0000Cancelled|r")
         elseif order.status == Database.STATUS.EXPIRED then
             statusText:SetText("|cffFFD700Expired|r")
+        elseif order.status == Database.STATUS.CLEARED then
+            statusText:SetText("|cff888888Cleared|r")
         else
             statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
         end
@@ -585,7 +587,7 @@ function UI.CreateOrderRow(order, index)
         local playerName = UnitName("player")
         
         -- Handle My Orders tab differently - show status for completed orders
-        if currentTab == "my" and (order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED) then
+        if currentTab == "my" and (order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED) then
             -- Show status instead of action button for completed orders
             local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             statusText:SetPoint("LEFT", 610, 0)
@@ -597,6 +599,8 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cffff8080Cancelled|r")
             elseif order.status == Database.STATUS.EXPIRED then
                 statusText:SetText("|cffFFD700Expired|r")
+            elseif order.status == Database.STATUS.CLEARED then
+                statusText:SetText("|cff888888Cleared|r")
             else
                 statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
             end

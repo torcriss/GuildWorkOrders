@@ -17,7 +17,8 @@ Database.STATUS = {
     PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response
     FULFILLED = "fulfilled", 
     CANCELLED = "cancelled",
-    EXPIRED = "expired"        -- Auto-expired after 24 hours (distinct from fulfilled)
+    EXPIRED = "expired",       -- Auto-expired after 24 hours (distinct from fulfilled)
+    CLEARED = "cleared"        -- Admin cleared (synced for 24 hours)
 }
 
 -- Order type constants
@@ -834,6 +835,15 @@ function Database.ClearSingleOrder(orderID, clearedBy)
     if order then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing active order %s (%s) by admin %s", 
             orderID, order.itemName or "Unknown", clearedBy or "Unknown"))
+        
+        -- Mark as cleared instead of deleting
+        order.status = Database.STATUS.CLEARED
+        order.clearedAt = GetCurrentTime()
+        order.clearedBy = clearedBy or "Admin"
+        order.version = (order.version or 1) + 1
+        
+        -- Move to history and remove from active orders
+        Database.MoveToHistory(order)
         GuildWorkOrdersDB.orders[orderID] = nil
         orderFound = true
     else
@@ -844,7 +854,12 @@ function Database.ClearSingleOrder(orderID, clearedBy)
                 if historyOrder and tostring(historyOrder.id) == tostring(orderID) then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing history order %s (%s) by admin %s", 
                         orderID, historyOrder.itemName or "Unknown", clearedBy or "Unknown"))
-                    table.remove(GuildWorkOrdersDB.history, i)
+                    
+                    -- Mark as cleared instead of deleting
+                    historyOrder.status = Database.STATUS.CLEARED
+                    historyOrder.clearedAt = GetCurrentTime()
+                    historyOrder.clearedBy = clearedBy or "Admin"
+                    historyOrder.version = (historyOrder.version or 1) + 1
                     orderFound = true
                     break
                 end

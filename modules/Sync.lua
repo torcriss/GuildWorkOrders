@@ -1005,7 +1005,9 @@ function Sync.SendHeartbeat()
            (order.status == Database.STATUS.FULFILLED and 
             order.fulfilledAt and currentTime - order.fulfilledAt < 86400) or
            (order.status == Database.STATUS.CANCELLED and 
-            order.completedAt and currentTime - order.completedAt < 86400) then
+            order.completedAt and currentTime - order.completedAt < 86400) or
+           (order.status == Database.STATUS.CLEARED and 
+            order.clearedAt and currentTime - order.clearedAt < 86400) then
             
             table.insert(ordersToSend, order)
             if Config.IsDebugMode() then
@@ -1241,7 +1243,8 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         -- For completed orders, move to history and remove from active orders
         if orderData.status == Database.STATUS.EXPIRED or 
            orderData.status == Database.STATUS.FULFILLED or 
-           orderData.status == Database.STATUS.CANCELLED then
+           orderData.status == Database.STATUS.CANCELLED or
+           orderData.status == Database.STATUS.CLEARED then
             
             -- Move to history if not already there
             Database.MoveToHistory(orderData)
