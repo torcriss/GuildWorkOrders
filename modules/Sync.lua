@@ -1171,7 +1171,9 @@ function Sync.HandleHeartbeat(parts, sender)
                 }
                 
                 -- Only accept heartbeat from the order creator
-                if orderData.player == sender then
+                -- Handle both with and without realm suffix in sender name
+                local baseSenderName = strsplit("-", sender)
+                if orderData.player == sender or orderData.player == baseSenderName then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
@@ -1228,26 +1230,25 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         return
     end
     
-    -- Handle different order statuses
-    if orderData.status == Database.STATUS.EXPIRED or orderData.status == Database.STATUS.FULFILLED or orderData.status == Database.STATUS.CANCELLED then
-        -- Remove from active orders if we have it
-        if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
-            GuildWorkOrdersDB.orders[orderData.id] = nil
-        end
-        
-        -- Don't add completed orders to history via heartbeat - they should only be in history
-        -- if they were completed locally. This prevents timestamp corruption from sync.
+    -- Sync all orders (including completed ones) to ensure status consistency
+    local success = Database.SyncOrder(orderData)
+    if success then
         if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring completed order from heartbeat: %s (%s)", 
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Synced order from heartbeat: %s (%s)", 
                 orderData.id, orderData.status))
         end
-    else
-        -- Active or pending order - sync normally
-        local success = Database.SyncOrder(orderData)
-        if success then
-            if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Updated order from heartbeat: %s (%s)", 
-                    orderData.id, orderData.status))
+        
+        -- For completed orders, move to history and remove from active orders
+        if orderData.status == Database.STATUS.EXPIRED or 
+           orderData.status == Database.STATUS.FULFILLED or 
+           orderData.status == Database.STATUS.CANCELLED then
+            
+            -- Move to history if not already there
+            Database.MoveToHistory(orderData)
+            
+            -- Remove from active orders
+            if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
+                GuildWorkOrdersDB.orders[orderData.id] = nil
             end
         end
     end
