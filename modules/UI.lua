@@ -24,10 +24,10 @@ local createOrderBtn = nil
 
 -- Tab definitions
 local TABS = {
+    {id = "all", text = "All Orders", tooltip = "View and manage all orders"},
     {id = "buy", text = "Buy Orders", tooltip = "View items players want to buy"},
     {id = "sell", text = "Sell Orders", tooltip = "View items players want to sell"},
-    {id = "my", text = "My Orders", tooltip = "Manage your own orders"},
-    {id = "history", text = "History", tooltip = "View completed orders"}
+    {id = "my", text = "My Orders", tooltip = "Manage your own orders"}
 }
 
 function UI.Initialize()
@@ -306,7 +306,7 @@ function UI.CreateColumnHeaders()
     UI.ClearColumnHeaders()
     local headers
     
-    if currentTab == "history" then
+    if currentTab == "all" then
         headers = {
             {text = "Type", width = 50, x = 10},
             {text = "Item", width = 160, x = 70},
@@ -316,7 +316,7 @@ function UI.CreateColumnHeaders()
             {text = "Seller", width = 70, x = 460},
             {text = "Remaining", width = 50, x = 545},
             {text = "Status", width = 70, x = 610},
-            {text = "Date", width = 90, x = 695}
+            {text = "Action/Date", width = 100, x = 695}
         }
     else
         headers = {
@@ -345,6 +345,7 @@ end
 -- Create order row
 function UI.CreateOrderRow(order, index)
     if not UI.listContent then return nil end
+    local playerName = UnitName("player")
     local row = CreateFrame("Button", nil, UI.listContent)
     row:SetSize(UI.listContent:GetWidth() - 20, 30)
     row:SetPoint("TOPLEFT", 0, -(index - 1) * 40)
@@ -514,75 +515,150 @@ function UI.CreateOrderRow(order, index)
         timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
     end
     
-    -- Handle history tab differently
-    if currentTab == "history" then
-        -- Status column for history
+    -- Handle All Orders tab - show status column and action buttons for active orders
+    if currentTab == "all" then
+        -- Status column for all orders
         local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statusText:SetPoint("LEFT", 610, 0)
+        statusText:SetPoint("LEFT", 610, 0)  -- Position at Status column header
         statusText:SetWidth(70)
         statusText:SetJustifyH("LEFT")
-        if order.status == Database.STATUS.FULFILLED then
+        if order.status == Database.STATUS.ACTIVE then
+            statusText:SetText("|cff00ccffPending|r")
+        elseif order.status == Database.STATUS.FULFILLED then
             statusText:SetText("|cff00ff00Completed|r")
-        elseif order.status == Database.STATUS.CANCELLED then
+        elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
             statusText:SetText("|cffff0000Cancelled|r")
-        elseif order.status == Database.STATUS.EXPIRED then
-            statusText:SetText("|cffFFD700Expired|r")
         elseif order.status == Database.STATUS.CLEARED then
             statusText:SetText("|cff888888Cleared|r")
+        elseif order.status == Database.STATUS.FAILED then
+            statusText:SetText("|cffff8080Failed|r")
         else
             statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
         end
         
-        -- Completion timestamp column for history
-        local completedText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        completedText:SetPoint("LEFT", 695, 0)
-        completedText:SetWidth(90)  -- Increased width for date/time format
-        completedText:SetJustifyH("LEFT")
-        if order.completedAt then
-            completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
+        -- Show action buttons for active orders, completed timestamp for others
+        if order.status == Database.STATUS.ACTIVE then
+            -- Action button for active orders
+            local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            actionBtn:SetSize(80, 20)
+            actionBtn:SetPoint("LEFT", 695, 0)
+            
+            -- Store button reference in row for later updates
+            row.actionButton = actionBtn
+            
+            -- Set up click handler for different scenarios
+            actionBtn:SetScript("OnClick", function()
+                if order.player == playerName then
+                    -- Own order - Cancel button
+                    UI.ConfirmCancelOrder(order)
+                else
+                    -- Others' orders - Buy/Sell buttons
+                    if order.type == Database.TYPE.WTB then
+                        UI.ConfirmSellToOrder(order)
+                    elseif order.type == Database.TYPE.WTS then
+                        UI.ConfirmBuyFromOrder(order)
+                    end
+                end
+            end)
+            
+            -- Use the same button update logic as other tabs
+            UI.UpdateOrderRowButton(row, order)
+            
+            -- Admin clear button for active orders
+            if order.status == Database.STATUS.ACTIVE then
+                local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                adminClearBtn:SetSize(20, 20)
+                adminClearBtn:SetPoint("LEFT", actionBtn, "RIGHT", 5, 0)
+                adminClearBtn:SetText("×")
+                
+                -- Style the button (red background)
+                if adminClearBtn:GetNormalTexture() then
+                    adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.1, 0.1, 1)
+                end
+                if adminClearBtn:GetHighlightTexture() then
+                    adminClearBtn:GetHighlightTexture():SetColorTexture(1.0, 0.2, 0.2, 1)
+                end
+                if adminClearBtn:GetPushedTexture() then
+                    adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
+                end
+                
+                -- Set font color to white
+                local btnText = adminClearBtn:GetFontString()
+                if btnText then
+                    btnText:SetTextColor(1, 1, 1, 1)
+                end
+                
+                -- Add tooltip
+                adminClearBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
+                    GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
+                    GameTooltip:Show()
+                end)
+                adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
+                
+                -- Click handler - prompt for admin password
+                adminClearBtn:SetScript("OnClick", function()
+                    UI.ConfirmAdminClearSingle(order)
+                end)
+                
+                -- Store reference for cleanup
+                row.adminClearButton = adminClearBtn
+            end
         else
-            completedText:SetText("|cff888888-|r")
+            -- Completion timestamp for completed orders
+            local completedText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            completedText:SetPoint("LEFT", 695, 0)
+            completedText:SetWidth(90)  -- Increased width for date/time format
+            completedText:SetJustifyH("LEFT")
+            if order.completedAt then
+                completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
+            else
+                completedText:SetText("|cff888888-|r")
+            end
         end
         
-        -- Admin clear button for history tab (positioned after date column)
-        local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        adminClearBtn:SetSize(20, 20)
-        adminClearBtn:SetPoint("LEFT", completedText, "RIGHT", 5, 0)
-        adminClearBtn:SetText("X")
-        
-        -- Simple styling approach - safer for Classic WoW
-        if adminClearBtn:GetNormalTexture() then
-            adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.2, 0.2, 1)
+        -- Only show admin clear for specific statuses (not for completed orders that are already cleared)
+        if order.status == Database.STATUS.CANCELLED then
+            local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            adminClearBtn:SetSize(20, 20)
+            adminClearBtn:SetPoint("LEFT", 790, 0)  -- Fixed position since completedText may not exist
+            adminClearBtn:SetText("×")
+            
+            -- Style the button (red background)
+            if adminClearBtn:GetNormalTexture() then
+                adminClearBtn:GetNormalTexture():SetColorTexture(0.8, 0.1, 0.1, 1)
+            end
+            if adminClearBtn:GetHighlightTexture() then
+                adminClearBtn:GetHighlightTexture():SetColorTexture(1.0, 0.2, 0.2, 1)
+            end
+            if adminClearBtn:GetPushedTexture() then
+                adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
+            end
+            
+            -- Set font color to white
+            local btnText = adminClearBtn:GetFontString()
+            if btnText then
+                btnText:SetTextColor(1, 1, 1, 1)
+            end
+            
+            -- Add tooltip
+            adminClearBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
+                GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            end)
+            adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
+            
+            -- Click handler - prompt for admin password
+            adminClearBtn:SetScript("OnClick", function()
+                UI.ConfirmAdminClearSingle(order)
+            end)
+            
+            -- Store reference for cleanup
+            row.adminClearButton = adminClearBtn
         end
-        if adminClearBtn:GetHighlightTexture() then
-            adminClearBtn:GetHighlightTexture():SetColorTexture(1, 0.3, 0.3, 1)
-        end
-        if adminClearBtn:GetPushedTexture() then
-            adminClearBtn:GetPushedTexture():SetColorTexture(0.6, 0.1, 0.1, 1)
-        end
-        
-        -- Set font color to white
-        local btnText = adminClearBtn:GetFontString()
-        if btnText then
-            btnText:SetTextColor(1, 1, 1, 1)
-        end
-        
-        -- Add tooltip
-        adminClearBtn:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Admin Clear (Password Required)", 1, 1, 1)
-            GameTooltip:AddLine("Remove this order for all guild members", 0.8, 0.8, 0.8)
-            GameTooltip:Show()
-        end)
-        adminClearBtn:SetScript("OnLeave", GameTooltip_Hide)
-        
-        -- Click handler - prompt for admin password
-        adminClearBtn:SetScript("OnClick", function()
-            UI.ConfirmAdminClearSingle(order)
-        end)
-        
-        -- Store reference for cleanup
-        row.adminClearButton = adminClearBtn
     else
         local playerName = UnitName("player")
         
@@ -593,14 +669,16 @@ function UI.CreateOrderRow(order, index)
             statusText:SetPoint("LEFT", 610, 0)
             statusText:SetWidth(70)
             statusText:SetJustifyH("LEFT")
-            if order.status == Database.STATUS.FULFILLED then
+            if order.status == Database.STATUS.ACTIVE then
+                statusText:SetText("|cff00ccffPending|r")
+            elseif order.status == Database.STATUS.FULFILLED then
                 statusText:SetText("|cff00ff00Completed|r")
-            elseif order.status == Database.STATUS.CANCELLED then
+            elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
                 statusText:SetText("|cffff8080Cancelled|r")
-            elseif order.status == Database.STATUS.EXPIRED then
-                statusText:SetText("|cffFFD700Expired|r")
             elseif order.status == Database.STATUS.CLEARED then
                 statusText:SetText("|cff888888Cleared|r")
+            elseif order.status == Database.STATUS.FAILED then
+                statusText:SetText("|cffff8080Failed|r")
             else
                 statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
             end
@@ -842,14 +920,14 @@ end
 function UI.GetFilteredOrders()
     local orders = {}
     
-    if currentTab == "buy" then
+    if currentTab == "all" then
+        orders = Database.GetAllOrdersUnified()
+    elseif currentTab == "buy" then
         orders = Database.GetOrdersByType(Database.TYPE.WTB)
     elseif currentTab == "sell" then
         orders = Database.GetOrdersByType(Database.TYPE.WTS)
     elseif currentTab == "my" then
         orders = Database.GetMyOrders()
-    elseif currentTab == "history" then
-        orders = Database.GetHistory()
     else
         orders = Database.GetAllOrders()
     end
@@ -1498,29 +1576,28 @@ function UI.ConfirmSellToOrder(order)
     local qtyText = (order.quantity and order.quantity > 0) and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_SELL_TO_ORDER"] = {
-        text = string.format("Request to sell %s%s to %s%s?\n\nThis will send a fulfillment request to %s.", 
+        text = string.format("Fulfill order to sell %s%s to %s%s?\n\nThis will immediately complete the order.", 
             qtyText,
             order.itemName or "item",
             order.player or "player",
-            priceText,
-            order.player or "player"),
-        button1 = "Send Request",
+            priceText),
+        button1 = "Complete Order",
         button2 = "Cancel",
         OnAccept = function()
-            -- Send fulfillment request using new system
-            local success, errorMsg = Database.RequestFulfillOrder(order.id)
+            -- Fulfill order directly (simplified flow)
+            local playerName = UnitName("player")
+            local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request sent to %s. Waiting for response...", order.player))
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to sell %s to %s.", 
+                    order.itemName or "item", order.player))
                 
-                -- Disable the button and show pending status
-                UI.SetButtonPending(order.id, "Requesting...")
-                
-                -- Set timeout for request
-                C_Timer.After(10, function()
-                    UI.SetButtonTimeout(order.id, "Request timed out - try again")
-                end)
+                -- Refresh UI to show completed state
+                UI.RefreshOrders()
             else
-                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to send request"))
+                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to complete order"))
+                
+                -- Refresh UI to show any status changes
+                UI.RefreshOrders()
             end
         end,
         timeout = 0,
@@ -1536,29 +1613,28 @@ function UI.ConfirmBuyFromOrder(order)
     local qtyText = (order.quantity and order.quantity > 0) and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_BUY_FROM_ORDER"] = {
-        text = string.format("Request to buy %s%s from %s%s?\n\nThis will send a fulfillment request to %s.", 
+        text = string.format("Fulfill order to buy %s%s from %s%s?\n\nThis will immediately complete the order.", 
             qtyText,
             order.itemName or "item",
             order.player or "player",
-            priceText,
-            order.player or "player"),
-        button1 = "Send Request",
+            priceText),
+        button1 = "Complete Order",
         button2 = "Cancel",
         OnAccept = function()
-            -- Send fulfillment request using new system
-            local success, errorMsg = Database.RequestFulfillOrder(order.id)
+            -- Fulfill order directly (simplified flow)
+            local playerName = UnitName("player")
+            local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request sent to %s. Waiting for response...", order.player))
+                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to buy %s from %s.", 
+                    order.itemName or "item", order.player))
                 
-                -- Disable the button and show pending status
-                UI.SetButtonPending(order.id, "Requesting...")
-                
-                -- Set timeout for request
-                C_Timer.After(10, function()
-                    UI.SetButtonTimeout(order.id, "Request timed out - try again")
-                end)
+                -- Refresh UI to show completed state
+                UI.RefreshOrders()
             else
-                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to send request"))
+                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to complete order"))
+                
+                -- Refresh UI to show any status changes
+                UI.RefreshOrders()
             end
         end,
         timeout = 0,
@@ -1579,7 +1655,7 @@ local pendingButtons = {}
 function UI.SetButtonPending(orderID, text)
     pendingButtons[orderID] = {
         state = "pending",
-        text = text or "Requesting...",
+        text = text or "Requesting",
         timestamp = GetCurrentTime()
     }
     UI.RefreshOrderButtonState(orderID)
@@ -1590,7 +1666,7 @@ function UI.SetButtonTimeout(orderID, text)
     if pendingButtons[orderID] and pendingButtons[orderID].state == "pending" then
         pendingButtons[orderID] = {
             state = "timeout",
-            text = text or "Timed out",
+            text = text or "Failed",
             timestamp = GetCurrentTime()
         }
         UI.RefreshOrderButtonState(orderID)
@@ -1610,7 +1686,7 @@ function UI.HandleFulfillmentResponse(orderID, response, sender, reason)
     if response == "accepted" then
         pendingButtons[orderID] = {
             state = "accepted",
-            text = "✓ Accepted - Contact " .. sender,
+            text = "Accepted",
             timestamp = GetCurrentTime()
         }
         UI.RefreshOrderButtonState(orderID)
@@ -1618,7 +1694,7 @@ function UI.HandleFulfillmentResponse(orderID, response, sender, reason)
     elseif response == "rejected" then
         pendingButtons[orderID] = {
             state = "rejected", 
-            text = reason or "Request rejected",
+            text = "Failed",
             timestamp = GetCurrentTime()
         }
         UI.RefreshOrderButtonState(orderID)
@@ -1655,7 +1731,7 @@ function UI.UpdateOrderRowButton(row, order)
     if order.player == playerName then
         if order.status == Database.STATUS.PENDING and order.pendingFulfiller then
             -- My order has a pending fulfillment - show complete button
-            row.actionButton:SetText("Complete Trade")
+            row.actionButton:SetText("Complete")
             row.actionButton:SetEnabled(true)
             row.actionButton:Show()
         else

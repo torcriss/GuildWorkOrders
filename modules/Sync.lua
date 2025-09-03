@@ -49,7 +49,8 @@ local STATUS_CODES = {
         ["fulfilled"] = "f",
         ["cancelled"] = "c",
         ["expired"] = "e",
-        ["cleared"] = "x"
+        ["cleared"] = "x",
+        ["failed"] = "F"
     },
     decode = {
         ["a"] = "active",
@@ -57,7 +58,8 @@ local STATUS_CODES = {
         ["f"] = "fulfilled", 
         ["c"] = "cancelled",
         ["e"] = "expired",
-        ["x"] = "cleared"
+        ["x"] = "cleared",
+        ["F"] = "failed"
     }
 }
 
@@ -1324,27 +1326,12 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         return
     end
     
-    -- Sync all orders (including completed ones) to ensure status consistency
+    -- Sync all orders (SyncOrder now handles routing to appropriate storage)
     local success = Database.SyncOrder(orderData)
     if success then
         if Config.IsDebugMode() then
             print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Synced order from heartbeat: %s (%s)", 
                 orderData.id, orderData.status))
-        end
-        
-        -- For completed orders, move to history and remove from active orders
-        if orderData.status == Database.STATUS.EXPIRED or 
-           orderData.status == Database.STATUS.FULFILLED or 
-           orderData.status == Database.STATUS.CANCELLED or
-           orderData.status == Database.STATUS.CLEARED then
-            
-            -- Move to history if not already there
-            Database.MoveToHistory(orderData)
-            
-            -- Remove from active orders
-            if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
-                GuildWorkOrdersDB.orders[orderData.id] = nil
-            end
         end
     end
 end

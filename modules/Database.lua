@@ -14,11 +14,12 @@ end
 -- Order status constants
 Database.STATUS = {
     ACTIVE = "active",
-    PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response
-    FULFILLED = "fulfilled", 
-    CANCELLED = "cancelled",
+    PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response (DEPRECATED)
+    FULFILLED = "fulfilled",   -- Successfully completed
+    CANCELLED = "cancelled",   -- Cancelled by user
     EXPIRED = "expired",       -- Auto-expired after 24 hours (distinct from fulfilled)
-    CLEARED = "cleared"        -- Admin cleared (synced for 24 hours)
+    CLEARED = "cleared",       -- Admin cleared (synced for 24 hours)
+    FAILED = "failed"          -- Fulfillment attempted but failed
 }
 
 -- Order type constants
@@ -163,8 +164,14 @@ function Database.GetAllOrders()
     
     local orders = {}
     for id, order in pairs(GuildWorkOrdersDB.orders) do
-        -- Only include active orders that haven't expired
-        if order.status == Database.STATUS.ACTIVE and order.expiresAt > GetCurrentTime() then
+        -- Only include active orders that haven't expired, defensive filtering for any stray completed orders
+        if (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) and 
+           order.expiresAt > GetCurrentTime() and
+           order.status ~= Database.STATUS.FULFILLED and
+           order.status ~= Database.STATUS.CANCELLED and
+           order.status ~= Database.STATUS.EXPIRED and
+           order.status ~= Database.STATUS.CLEARED and
+           order.status ~= Database.STATUS.FAILED then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(orders, order)
@@ -349,13 +356,62 @@ function Database.CompleteFulfillment(orderID)
     return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, order.pendingFulfiller)
 end
 
--- Request to fulfill order (sends request to creator)
+-- Request to fulfill order (sends request to creator) - DEPRECATED
 function Database.RequestFulfillOrder(orderID)
     -- Use the new request system instead of direct fulfillment
     if addon.Sync then
         return addon.Sync.RequestFulfillment(orderID)
     else
         return false, "Sync system not available"
+    end
+end
+
+-- Directly fulfill order (simplified flow)
+function Database.DirectFulfillOrder(orderID, fulfillerName)
+    if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
+        return false, "Order not found"
+    end
+    
+    local order = GuildWorkOrdersDB.orders[orderID]
+    local playerName = UnitName("player")
+    
+    -- Cannot fulfill own orders
+    if order.player == playerName then
+        return false, "Cannot fulfill your own orders"
+    end
+    
+    -- Check if order is still active
+    if order.status ~= Database.STATUS.ACTIVE then
+        if order.status == Database.STATUS.FULFILLED then
+            return false, "Order already completed"
+        elseif order.status == Database.STATUS.CANCELLED then
+            return false, "Order was cancelled"
+        elseif order.status == Database.STATUS.EXPIRED then
+            return false, "Order has expired"
+        else
+            return false, "Order is no longer active"
+        end
+    end
+    
+    -- Check if order is expired
+    if order.expiresAt and order.expiresAt < GetCurrentTime() then
+        -- Set to expired and move to history
+        Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
+        return false, "Order has expired"
+    end
+    
+    -- Fulfill the order directly
+    local success = Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, fulfillerName)
+    if success then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s fulfilled directly by %s", 
+                orderID, fulfillerName))
+        end
+        return true, "Order completed successfully"
+    else
+        -- If update failed, mark as failed
+        Database.UpdateOrderStatus(orderID, Database.STATUS.FAILED)
+        return false, "Failed to complete order"
     end
 end
 
@@ -390,8 +446,21 @@ function Database.SyncOrder(orderData)
         orderData.fulfilledBy = existingOrder.fulfilledBy
     end
     
-    -- Accept the order
-    GuildWorkOrdersDB.orders[orderData.id] = orderData
+    -- Route order to appropriate storage based on status
+    if orderData.status == Database.STATUS.FULFILLED or 
+       orderData.status == Database.STATUS.CANCELLED or 
+       orderData.status == Database.STATUS.EXPIRED or
+       orderData.status == Database.STATUS.CLEARED or
+       orderData.status == Database.STATUS.FAILED then
+        -- Completed orders go to history, remove from active orders
+        Database.MoveToHistory(orderData)
+        if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
+            GuildWorkOrdersDB.orders[orderData.id] = nil
+        end
+    else
+        -- Active/pending orders go to active orders table
+        GuildWorkOrdersDB.orders[orderData.id] = orderData
+    end
     
     if Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Synced order: %s from %s",
@@ -444,6 +513,35 @@ function Database.GetHistory()
     end
     
     return history
+end
+
+-- Get all orders unified (active + history)
+function Database.GetAllOrdersUnified()
+    local allOrders = {}
+    
+    -- Get all active orders (without filtering by status)
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+        for id, order in pairs(GuildWorkOrdersDB.orders) do
+            -- Clean up any corrupted item names
+            Database.CleanItemName(order)
+            table.insert(allOrders, order)
+        end
+    end
+    
+    -- Get all history orders
+    local history = GuildWorkOrdersDB.history or {}
+    for _, order in ipairs(history) do
+        -- Clean up any corrupted item names in history
+        Database.CleanItemName(order)
+        table.insert(allOrders, order)
+    end
+    
+    -- Sort by timestamp (newest first)
+    table.sort(allOrders, function(a, b)
+        return (a.timestamp or 0) > (b.timestamp or 0)
+    end)
+    
+    return allOrders
 end
 
 -- Clear history
