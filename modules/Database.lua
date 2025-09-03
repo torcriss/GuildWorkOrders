@@ -404,6 +404,10 @@ function Database.MoveToHistory(order)
     -- Check if order already exists in history
     for i, existingOrder in ipairs(GuildWorkOrdersDB.history) do
         if existingOrder.id == order.id then
+            -- Preserve existing completion date if already set
+            if existingOrder.completedAt and not order.completedAt then
+                order.completedAt = existingOrder.completedAt
+            end
             -- Update existing entry instead of adding duplicate
             GuildWorkOrdersDB.history[i] = order
             return
