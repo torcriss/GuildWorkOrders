@@ -4,8 +4,8 @@
 # Copies all addon files to WoW Classic Era AddOns directory
 
 # Source and destination paths
-SOURCE_DIR="/Users/chrisbrault/GuildWorkOrders"
-DEST_DIR="/Applications/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
+SOURCE_DIR="/home/chris/GuildWorkOrders"
+DEST_DIR="/home/chris/.var/app/com.usebottles.bottles/data/bottles/bottles/Games/drive_c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
 
 echo "Deploying GuildWorkOrders addon..."
 echo "Source: $SOURCE_DIR"

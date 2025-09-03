@@ -33,18 +33,42 @@ local function Initialize()
     -- Auto-sync on login if enabled
     if addon.Config and addon.Config.Get("autoSync") then
         C_Timer.After(5, function()  -- Delay to let guild roster load
+            if addon.Config and addon.Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-sync timer: addon.Sync = %s", tostring(addon.Sync ~= nil)))
+                if addon.Sync then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-sync timer: RequestSync = %s, SendPing = %s", 
+                        tostring(addon.Sync.RequestSync ~= nil), tostring(addon.Sync.SendPing ~= nil)))
+                end
+            end
+            
             if addon.Sync then
-                addon.Sync.RequestSync()
-                addon.Sync.SendPing()
+                if addon.Sync.RequestSync then
+                    addon.Sync.RequestSync()
+                end
+                if addon.Sync.SendPing then
+                    addon.Sync.SendPing()
+                end
             end
         end)
     end
     
     -- Frequent auto-sync timer (every 1 minute)
     C_Timer.NewTicker(60, function()
+        if addon.Config and addon.Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Frequent timer: addon.Sync = %s", tostring(addon.Sync ~= nil)))
+            if addon.Sync then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Frequent timer: RequestSync = %s, SendPing = %s", 
+                    tostring(addon.Sync.RequestSync ~= nil), tostring(addon.Sync.SendPing ~= nil)))
+            end
+        end
+        
         if addon.Sync then
-            addon.Sync.RequestSync()
-            addon.Sync.SendPing()
+            if addon.Sync.RequestSync then
+                addon.Sync.RequestSync()
+            end
+            if addon.Sync.SendPing then
+                addon.Sync.SendPing()
+            end
         end
         -- Also update status bar to refresh sync time
         if addon.UI and addon.UI.UpdateStatusBar then
@@ -64,7 +88,7 @@ local function Initialize()
         if addon.Database then
             addon.Database.CleanupExpiredOrders()
         end
-        if addon.Sync then
+        if addon.Sync and addon.Sync.CleanupOnlineUsers then
             addon.Sync.CleanupOnlineUsers()
         end
     end)
@@ -91,7 +115,7 @@ GWO:SetScript("OnEvent", function(self, event, ...)
         
     elseif event == "GUILD_ROSTER_UPDATE" then
         -- Guild roster changed, might affect sync
-        if addon.Sync then
+        if addon.Sync and addon.Sync.SendPing then
             C_Timer.After(2, function()
                 addon.Sync.SendPing()  -- Discover online users
             end)

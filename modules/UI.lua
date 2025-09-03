@@ -253,7 +253,7 @@ function UI.CreateSearchBar()
     refreshBtn:SetText("Refresh")
     refreshBtn:SetScript("OnClick", function()
         UI.RefreshOrders()
-        if Sync then
+        if Sync and Sync.SendPing then
             Sync.SendPing()  -- Refresh online users
         end
     end)
@@ -1013,13 +1013,19 @@ function UI.UpdateStatusBar()
     if not UI.onlineText or not Sync then return end
     
     -- Update online count
-    local onlineCount = Sync.GetOnlineUserCount()
+    local onlineCount = 0
+    if Sync.GetOnlineUserCount then
+        onlineCount = Sync.GetOnlineUserCount()
+    end
     UI.onlineText:SetText(string.format("|cff00ff00• Online: %d|r", onlineCount))
     
     -- Update sync status
-    local syncStatus = Sync.GetSyncStatus()
+    local syncStatus = {}
+    if Sync.GetSyncStatus then
+        syncStatus = Sync.GetSyncStatus()
+    end
     local syncText = "Never"
-    if syncStatus.lastSync > 0 then
+    if syncStatus.lastSync and syncStatus.lastSync > 0 then
         local timeAgo = UI.GetTimeAgo(syncStatus.lastSync)
         if timeAgo == "Now" then
             syncText = timeAgo
@@ -1079,7 +1085,7 @@ function UI.ShowOnlineTooltip(frame)
     GameTooltip:SetOwner(frame, "ANCHOR_TOPLEFT")
     GameTooltip:SetText("GuildWorkOrders Users Online")
     
-    if Sync then
+    if Sync and Sync.GetOnlineUsers then
         local users = Sync.GetOnlineUsers()
         local count = 0
         for user, info in pairs(users) do
@@ -1105,7 +1111,7 @@ function UI.ConfirmCancelOrder(order)
         button2 = "No",
         OnAccept = function()
             Database.CancelOrder(order.id)
-            if Sync then
+            if Sync and Sync.BroadcastOrderUpdate then
                 Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
             end
             UI.RefreshOrders()
@@ -1393,7 +1399,7 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
     local order = Database.CreateOrder(orderType, itemLink, quantity, price)
     if order then
         -- Broadcast to other users
-        if Sync then
+        if Sync and Sync.BroadcastNewOrder then
             Sync.BroadcastNewOrder(order)
         end
         
@@ -1422,7 +1428,6 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
         dialog:Hide()
         UI.RefreshOrders()
         UI.UpdateStatusBar()  -- Update counter after creating order
-        UI.SelectTab("my")  -- Switch to My Orders tab
         
         print(string.format("|cff00ff00[GuildWorkOrders]|r Created %s order for %s", orderType, order.itemName or "Unknown Item"))
     end
@@ -1466,7 +1471,7 @@ function UI.ConfirmCancelOrder(order)
         OnAccept = function()
             local success = Database.CancelOrder(order.id)
             if success then
-                if Sync then
+                if Sync and Sync.BroadcastOrderUpdate then
                     Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
                 end
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
@@ -1485,8 +1490,8 @@ end
 
 -- Request to fulfill a buy order (sell to buyer)
 function UI.ConfirmSellToOrder(order)
-    local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
-    local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
+    local priceText = (order.price and order.price ~= "" and order.price ~= "?") and (" for " .. order.price) or " (price negotiable)"
+    local qtyText = (order.quantity and order.quantity > 0) and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_SELL_TO_ORDER"] = {
         text = string.format("Request to sell %s%s to %s%s?\n\nThis will send a fulfillment request to %s.", 
@@ -1523,8 +1528,8 @@ end
 
 -- Request to fulfill a sell order (buy from seller)
 function UI.ConfirmBuyFromOrder(order)
-    local priceText = order.price and (" for " .. order.price) or " (price negotiable)"
-    local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
+    local priceText = (order.price and order.price ~= "" and order.price ~= "?") and (" for " .. order.price) or " (price negotiable)"
+    local qtyText = (order.quantity and order.quantity > 0) and (tostring(order.quantity) .. "x ") or ""
     
     StaticPopupDialogs["GWO_BUY_FROM_ORDER"] = {
         text = string.format("Request to buy %s%s from %s%s?\n\nThis will send a fulfillment request to %s.", 
