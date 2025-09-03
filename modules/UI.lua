@@ -548,6 +548,7 @@ function UI.CreateOrderRow(order, index)
             
             -- Set up click handler for different scenarios
             actionBtn:SetScript("OnClick", function()
+                local playerName = UnitName("player")  -- Get fresh player name like working tabs
                 if order.player == playerName then
                     -- Own order - Cancel button
                     UI.ConfirmCancelOrder(order)
@@ -1588,6 +1589,9 @@ function UI.ConfirmSellToOrder(order)
             local playerName = UnitName("player")
             local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
+                if Sync and Sync.BroadcastOrderUpdate then
+                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
+                end
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to sell %s to %s.", 
                     order.itemName or "item", order.player))
                 
@@ -1625,6 +1629,9 @@ function UI.ConfirmBuyFromOrder(order)
             local playerName = UnitName("player")
             local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
+                if Sync and Sync.BroadcastOrderUpdate then
+                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
+                end
                 print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to buy %s from %s.", 
                     order.itemName or "item", order.player))
                 
