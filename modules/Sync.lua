@@ -41,6 +41,55 @@ local MSG_TYPE = {
     CLEAR_SINGLE = "CLEAR_SINGLE"     -- Admin clear single order command
 }
 
+-- Status code mappings for heartbeat compression
+local STATUS_CODES = {
+    encode = {
+        ["active"] = "a",
+        ["pending"] = "p", 
+        ["fulfilled"] = "f",
+        ["cancelled"] = "c",
+        ["expired"] = "e",
+        ["cleared"] = "x"
+    },
+    decode = {
+        ["a"] = "active",
+        ["p"] = "pending",
+        ["f"] = "fulfilled", 
+        ["c"] = "cancelled",
+        ["e"] = "expired",
+        ["x"] = "cleared"
+    }
+}
+
+-- Helper functions for heartbeat compression
+local function EncodeStatus(status)
+    return STATUS_CODES.encode[status] or status
+end
+
+local function DecodeStatus(code)
+    return STATUS_CODES.decode[code] or code
+end
+
+local function CreateShortOrderId(order)
+    -- Use first letter of player name + last 6 digits of timestamp
+    local firstLetter = string.sub(order.player or "U", 1, 1)
+    local shortTimestamp = string.sub(tostring(order.timestamp or 0), -6)
+    return firstLetter .. shortTimestamp
+end
+
+local function GetRelativeTimestamps(order)
+    local currentTime = GetCurrentTime()
+    local timeAgo = math.max(0, currentTime - (order.timestamp or 0))
+    local ttl = math.max(0, (order.expiresAt or 0) - currentTime)
+    return timeAgo, ttl
+end
+
+local function RestoreAbsoluteTimestamps(timeAgo, ttl, currentTime)
+    local timestamp = currentTime - timeAgo
+    local expiresAt = currentTime + ttl
+    return timestamp, expiresAt
+end
+
 -- State tracking
 local messageQueue = {}
 local lastSendTime = 0
@@ -1064,19 +1113,25 @@ function Sync.SendHeartbeat()
         
         for i = startIdx, endIdx do
             local order = ordersToSend[i]
-            local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d",
+            
+            -- Use compressed format for heartbeats (but keep full ID for uniqueness)
+            local timeAgo, ttl = GetRelativeTimestamps(order)
+            local encodedStatus = EncodeStatus(order.status)
+            
+            local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s",
                 order.id,
                 order.type,
                 order.player,
                 EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
                 order.quantity or 0,
                 EscapeDelimiters(order.price or ""),
-                order.timestamp,
-                order.expiresAt,
+                timeAgo,
+                ttl,
                 order.version or 1,
-                order.status,
+                encodedStatus,
                 EscapeDelimiters(order.pendingFulfiller or ""),
-                order.pendingTimestamp or 0
+                order.pendingTimestamp or 0,
+                EscapeDelimiters(order.fulfilledBy or "")
             )
             
             -- Removed verbose debug logging for order strings
@@ -1156,7 +1211,44 @@ function Sync.HandleHeartbeat(parts, sender)
     for _, orderStr in ipairs(orderStrings) do
         if orderStr and orderStr ~= "" then
             local orderParts = {strsplit(":", orderStr)}
-            if #orderParts >= 12 then
+            if #orderParts >= 13 then
+                -- Parse compressed heartbeat format
+                local timeAgo = tonumber(orderParts[7]) or 0
+                local ttl = tonumber(orderParts[8]) or 86400
+                local encodedStatus = orderParts[10]
+                local fulfilledBy = UnescapeDelimiters(orderParts[13])
+                
+                -- Restore absolute timestamps
+                local currentTime = GetCurrentTime()
+                local timestamp, expiresAt = RestoreAbsoluteTimestamps(timeAgo, ttl, currentTime)
+                
+                local orderData = {
+                    id = orderParts[1],
+                    type = orderParts[2],
+                    player = orderParts[3],
+                    itemLink = UnescapeDelimiters(orderParts[4]),
+                    quantity = tonumber(orderParts[5]),
+                    price = UnescapeDelimiters(orderParts[6]),
+                    timestamp = timestamp,
+                    expiresAt = expiresAt,
+                    version = tonumber(orderParts[9]) or 1,
+                    status = DecodeStatus(encodedStatus),
+                    pendingFulfiller = UnescapeDelimiters(orderParts[11]),
+                    pendingTimestamp = tonumber(orderParts[12]) or 0,
+                    fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil
+                }
+                
+                -- Only accept heartbeat from the order creator
+                -- Handle both with and without realm suffix in sender name
+                local baseSenderName = strsplit("-", sender)
+                if orderData.player == sender or orderData.player == baseSenderName then
+                    Sync.ProcessHeartbeatOrder(orderData, sender)
+                elseif Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
+                        orderData.player, sender))
+                end
+            elseif #orderParts >= 12 then
+                -- Handle legacy format for backward compatibility
                 local orderData = {
                     id = orderParts[1],
                     type = orderParts[2],

@@ -385,6 +385,11 @@ function Database.SyncOrder(orderData)
         end
     end
     
+    -- Preserve fulfilledBy if it exists locally but not in incoming data
+    if existingOrder and existingOrder.fulfilledBy and not orderData.fulfilledBy then
+        orderData.fulfilledBy = existingOrder.fulfilledBy
+    end
+    
     -- Accept the order
     GuildWorkOrdersDB.orders[orderData.id] = orderData
     
