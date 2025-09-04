@@ -512,8 +512,15 @@ function UI.CreateOrderRow(order, index)
         statusText:SetPoint("LEFT", 610, 0)  -- Position at Status column header
         statusText:SetWidth(70)
         statusText:SetJustifyH("LEFT")
-        if order.status == Database.STATUS.ACTIVE then
-            statusText:SetText("|cff00ccffPending|r")
+        
+        -- Check if order is expired first (overrides status)
+        if order.expiresAt and order.expiresAt < GetCurrentTime() and 
+           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
+            statusText:SetText("|cffffff00Expired|r")
+        elseif order.status == Database.STATUS.ACTIVE then
+            statusText:SetText("|cff00ccffActive|r")
+        elseif order.status == Database.STATUS.PENDING then
+            statusText:SetText("|cffFFD700Pending|r")
         elseif order.status == Database.STATUS.FULFILLED then
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
@@ -718,8 +725,9 @@ function UI.CreateOrderRow(order, index)
             -- Initialize button state using new system
             UI.UpdateOrderRowButton(row, order)
             
-            -- Admin clear button (red X) - show for active, pending, and cancelled orders
-            if (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING or order.status == Database.STATUS.CANCELLED) then
+            -- Admin clear button (red X) - only show for truly active orders (not expired or pending)
+            if order.status == Database.STATUS.ACTIVE and 
+               (not order.expiresAt or order.expiresAt > GetCurrentTime()) then
                 local adminClearBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
                 adminClearBtn:SetSize(20, 20)
                 adminClearBtn:SetPoint("LEFT", actionBtn, "RIGHT", 5, 0)
