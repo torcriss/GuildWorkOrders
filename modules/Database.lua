@@ -17,7 +17,7 @@ Database.STATUS = {
     PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response (DEPRECATED)
     FULFILLED = "fulfilled",   -- Successfully completed
     CANCELLED = "cancelled",   -- Cancelled by user
-    EXPIRED = "expired",       -- Auto-expired after 24 hours (distinct from fulfilled)
+    EXPIRED = "expired",       -- Auto-expired after 30 minutes (distinct from fulfilled)
     CLEARED = "cleared",       -- Admin cleared (synced for 24 hours)
     FAILED = "failed"          -- Fulfillment attempted but failed
 }
@@ -30,7 +30,7 @@ Database.TYPE = {
 
 -- Database limit constants
 Database.LIMITS = {
-    MAX_TOTAL_ORDERS = 200,
+    MAX_TOTAL_ORDERS = 500,
     MAX_ACTIVE_PER_USER = 10
 }
 
@@ -108,7 +108,7 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
         priceInCopper = priceInCopper,
         message = message or "",
         timestamp = GetCurrentTime(),
-        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 86400),
+        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 1800),
         status = Database.STATUS.ACTIVE,
         version = 1
     }
@@ -121,8 +121,8 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     GuildWorkOrdersDB.orders[order.id] = order
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Created order: %s %s %s for %s",
-            orderType, quantity or "?", itemName, price or "?"))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Created %s order: %dx %s for %s",
+            orderType == Database.TYPE.WTB and "buy" or "sell", quantity or 1, itemName, price or "negotiate"))
     end
     
     return order
@@ -257,7 +257,7 @@ function Database.GetMyCreatedOrders()
                 timeSinceCompleted = currentTime - order.expiredAt
             end
             
-            if timeSinceCompleted and timeSinceCompleted < 86400 then -- 24 hours
+            if timeSinceCompleted and timeSinceCompleted < 1800 then -- 30 minutes
                 table.insert(myOrders, order)
             end
         end
@@ -310,8 +310,8 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     end
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s -> %s%s",
-            orderID, oldStatus, newStatus, fulfilledBy and (" by " .. fulfilledBy) or ""))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order status changed: %s -> %s%s",
+            oldStatus, newStatus, fulfilledBy and (" by " .. fulfilledBy) or ""))
     end
     
     return true
@@ -404,8 +404,8 @@ function Database.DirectFulfillOrder(orderID, fulfillerName)
     local success = Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, fulfillerName)
     if success then
         if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s fulfilled directly by %s", 
-                orderID, fulfillerName))
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order completed by %s", 
+                fulfillerName))
         end
         return true, "Order completed successfully"
     else
@@ -477,8 +477,8 @@ function Database.SyncOrder(orderData)
     end
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Synced order: %s from %s",
-            orderData.id, orderData.player))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received order update: %s from %s",
+            orderData.itemName or "Unknown Item", orderData.player))
     end
     
     return true
@@ -671,7 +671,7 @@ function Database.ResetDatabase()
     return true
 end
 
--- Auto-expire orders after 24 hours (mark as EXPIRED, not FULFILLED) 
+-- Auto-expire orders after 30 minutes (mark as EXPIRED, not FULFILLED) 
 function Database.CleanupExpiredOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
         return 0
@@ -709,7 +709,7 @@ function Database.CleanupExpiredOrders()
                     end
                     
                     -- Notify me that my order expired
-                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after 24 hours", 
+                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after 30 minutes", 
                         order.type, order.itemName or "item"))
                         
                 else
@@ -727,7 +727,7 @@ function Database.CleanupExpiredOrders()
     end
     
     if expiredCount > 0 and Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Expired %d orders after 24 hours", expiredCount))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d expired orders", expiredCount))
     end
     
     return expiredCount
@@ -850,7 +850,7 @@ function Database.PurgeNonActiveOrders(targetCount)
     end
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %d old history entries to make room for new orders", purgeCount))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Removed %d old orders to make space (database limit: %d)", purgeCount, Database.LIMITS.MAX_TOTAL_ORDERS))
     end
     
     return purgeCount

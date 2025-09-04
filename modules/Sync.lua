@@ -113,7 +113,7 @@ function Sync.Initialize()
     Sync.StartHeartbeat()
     
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Sync module initialized with heartbeat")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Guild communication system ready - heartbeat every 3 seconds")
     end
 end
 
@@ -347,7 +347,7 @@ function Sync.HandleNewOrder(parts, sender)
         quantity = tonumber(parts[7]),
         price = UnescapeDelimiters(parts[8]),
         timestamp = tonumber(parts[9]) or GetCurrentTime(),
-        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 86400),
+        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 1800),
         version = tonumber(parts[11]) or 1,
         status = Database.STATUS.ACTIVE
     }
@@ -463,32 +463,9 @@ end
 
 -- Request sync from other users
 function Sync.RequestSync()
-    local message = string.format("%s|%d|%d|%d",
-        MSG_TYPE.SYNC_REQUEST,
-        PROTOCOL_VERSION,
-        GuildWorkOrdersDB.syncData.lastSync or 0,
-        Database.GetGlobalClearTimestamp()
-    )
-    
-    Sync.QueueMessage(message)
-    
-    -- Set up timeout
-    syncInProgress = true
-    C_Timer.After(SYNC_TIMEOUT, function()
-        if syncInProgress then
-            syncInProgress = false
-            if Config.IsDebugMode() then
-                print("|cff00ff00[GuildWorkOrders Debug]|r Sync request timed out")
-            end
-            -- Update UI when sync times out
-            if addon.UI and addon.UI.UpdateStatusBar then
-                addon.UI.UpdateStatusBar()
-            end
-        end
-    end)
-    
+    -- Full sync disabled - using heartbeat-only system
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Requesting sync from guild")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Full sync disabled - orders sync via heartbeat only")
     end
 end
 
@@ -1030,12 +1007,12 @@ function Sync.SendHeartbeat()
     
     local myOrders = Database.GetMyCreatedOrders()
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found %d my orders for heartbeat", myOrders and #myOrders or 0))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r You have %d orders to share with guild", myOrders and #myOrders or 0))
     end
     
     if not myOrders or #myOrders == 0 then
         if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Heartbeat skipped: no orders to broadcast")
+            print("|cff00ff00[GuildWorkOrders Debug]|r No orders to share - skipping broadcast")
         end
         return -- No orders to broadcast
     end
@@ -1044,159 +1021,111 @@ function Sync.SendHeartbeat()
     local ordersToSend = {}
     
     for _, order in ipairs(myOrders) do
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order %s status: %s", order.id or "unknown", order.status or "unknown"))
-        end
-        
-        -- Include active, pending orders and recently completed (24 hour window)
+        -- Include active, pending orders and recently completed (30 minute window)
         if order.status == Database.STATUS.ACTIVE or 
            order.status == Database.STATUS.PENDING or
            (order.status == Database.STATUS.EXPIRED and 
-            order.expiredAt and currentTime - order.expiredAt < 86400) or
+            order.expiredAt and currentTime - order.expiredAt < 1800) or
            (order.status == Database.STATUS.FULFILLED and 
-            order.fulfilledAt and currentTime - order.fulfilledAt < 86400) or
+            order.fulfilledAt and currentTime - order.fulfilledAt < 1800) or
            (order.status == Database.STATUS.CANCELLED and 
-            order.completedAt and currentTime - order.completedAt < 86400) or
+            order.completedAt and currentTime - order.completedAt < 1800) or
            (order.status == Database.STATUS.CLEARED and 
-            order.clearedAt and currentTime - order.clearedAt < 86400) then
+            order.clearedAt and currentTime - order.clearedAt < 1800) then
             
             table.insert(ordersToSend, order)
-            if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Including order %s in heartbeat", order.id or "unknown"))
-            end
         end
     end
     
     if #ordersToSend == 0 then
         if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r No orders passed filtering for heartbeat")
+            print("|cff00ff00[GuildWorkOrders Debug]|r No current orders need sharing")
         end
         return -- No relevant orders to broadcast
     end
     
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Proceeding to send heartbeat with %d orders", #ordersToSend))
-    end
-    
-    -- Sort orders by priority: PENDING first, then newest ACTIVE
+    -- Sort orders by priority: ACTIVE first, then PENDING, then completed
     table.sort(ordersToSend, function(a, b)
-        -- Pending orders have highest priority
-        if a.status == Database.STATUS.PENDING and b.status ~= Database.STATUS.PENDING then
+        -- Active orders have highest priority
+        if a.status == Database.STATUS.ACTIVE and b.status ~= Database.STATUS.ACTIVE then
             return true
-        elseif b.status == Database.STATUS.PENDING and a.status ~= Database.STATUS.PENDING then
+        elseif b.status == Database.STATUS.ACTIVE and a.status ~= Database.STATUS.ACTIVE then
             return false
         end
         -- For same status, newest first
         return (a.timestamp or 0) > (b.timestamp or 0)
     end)
     
-    -- Limit to most important orders for performance
-    if #ordersToSend > MAX_HEARTBEAT_ORDERS then
-        local limited = {}
-        for i = 1, MAX_HEARTBEAT_ORDERS do
-            table.insert(limited, ordersToSend[i])
-        end
-        ordersToSend = limited
+    -- ROTATING HEARTBEAT: Send only 1 order per heartbeat
+    local heartbeatIndex = GuildWorkOrdersDB.syncData.heartbeatIndex or 1
+    
+    -- Ensure index is within bounds
+    if heartbeatIndex > #ordersToSend then
+        heartbeatIndex = 1
+        GuildWorkOrdersDB.syncData.heartbeatIndex = 1
     end
     
-    -- Send orders in batches (like sync system does)
-    local batches = math.ceil(#ordersToSend / BATCH_SIZE)
-    
+    local orderToSend = ordersToSend[heartbeatIndex]
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Creating %d batches for heartbeat", batches))
+        local statusDesc = orderToSend.status == Database.STATUS.ACTIVE and "active" or 
+                          orderToSend.status == Database.STATUS.PENDING and "pending" or "completed"
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sharing order %d of %d: %s (%s)", 
+            heartbeatIndex, #ordersToSend, orderToSend.itemName or "Unknown Item", statusDesc))
     end
     
-    for batchNum = 1, batches do
-        local startIdx = (batchNum - 1) * BATCH_SIZE + 1
-        local endIdx = math.min(batchNum * BATCH_SIZE, #ordersToSend)
-        
-        local batchData = {}
-        local skippedCount = 0
-        
-        for i = startIdx, endIdx do
-            local order = ordersToSend[i]
-            
-            -- Use compressed format for heartbeats (but keep full ID for uniqueness)
-            local timeAgo, ttl = GetRelativeTimestamps(order)
-            local encodedStatus = EncodeStatus(order.status)
-            
-            local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s",
-                order.id,
-                order.type,
-                order.player,
-                EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
-                order.quantity or 0,
-                EscapeDelimiters(order.price or ""),
-                timeAgo,
-                ttl,
-                order.version or 1,
-                encodedStatus,
-                EscapeDelimiters(order.pendingFulfiller or ""),
-                order.pendingTimestamp or 0,
-                EscapeDelimiters(order.fulfilledBy or "")
-            )
-            
-            -- Removed verbose debug logging for order strings
-            
-            -- Check if adding this order would make the message too large
-            local testBatch = table.concat(batchData, ";")
-            if testBatch ~= "" then testBatch = testBatch .. ";" end
-            testBatch = testBatch .. orderStr
-            
-            local testMessage = string.format("%s|%d|%d|%d|%s",
-                MSG_TYPE.HEARTBEAT, PROTOCOL_VERSION, batchNum, batches, testBatch)
-            
-            -- Removed verbose debug logging for test messages
-            
-            local isValid, errorMsg = ValidateMessageSize(testMessage)
-            if isValid then
-                table.insert(batchData, orderStr)
-            else
-                skippedCount = skippedCount + 1
-                if Config.IsDebugMode() then
-                    print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Skipping oversized order in heartbeat: %s (%s)",
-                        order.id, order.itemName or "Unknown Item"))
-                end
-            end
+    -- Move to next order for next heartbeat
+    GuildWorkOrdersDB.syncData.heartbeatIndex = (heartbeatIndex % #ordersToSend) + 1
+    
+    -- Create single-order list for existing broadcast code
+    local singleOrder = { orderToSend }
+    
+    -- Send the single order as a heartbeat
+    local order = orderToSend
+    local timeAgo, ttl = GetRelativeTimestamps(order)
+    local encodedStatus = EncodeStatus(order.status)
+    
+    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s",
+        order.id,
+        order.type,
+        order.player,
+        EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
+        order.quantity or 0,
+        EscapeDelimiters(order.price or ""),
+        timeAgo,
+        ttl,
+        order.version or 1,
+        encodedStatus,
+        EscapeDelimiters(order.pendingFulfiller or ""),
+        order.pendingTimestamp or 0,
+        EscapeDelimiters(order.fulfilledBy or "")
+    )
+    
+    local heartbeatMessage = string.format("%s|%d|%d|%d|%s",
+        MSG_TYPE.HEARTBEAT,
+        PROTOCOL_VERSION,
+        1, -- Single batch
+        1, -- Total batches
+        orderStr
+    )
+    
+    local isValid, errorMsg = ValidateMessageSize(heartbeatMessage)
+    if isValid then
+        local success = Sync.QueueMessage(heartbeatMessage)
+        if Config.IsDebugMode() and success then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Order broadcast successful")
+        elseif Config.IsDebugMode() and not success then
+            print("|cffFF6B6B[GuildWorkOrders Debug]|r Failed to broadcast order")
         end
-        
-        if skippedCount > 0 and not Config.IsDebugMode() then
-            print(string.format("|cffFFAA00[GuildWorkOrders]|r Warning: %d orders skipped in heartbeat due to size limits", skippedCount))
-        end
-        
-        -- Only send batch if it has orders
-        if #batchData > 0 then
-            local batchMessage = string.format("%s|%d|%d|%d|%s",
-                MSG_TYPE.HEARTBEAT,
-                PROTOCOL_VERSION,
-                batchNum,
-                batches,
-                table.concat(batchData, ";")
-            )
-            
-            if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sending batch %d/%d with %d orders", 
-                    batchNum, batches, #batchData))
-            end
-            
-            local success = Sync.QueueMessage(batchMessage)
-            if Config.IsDebugMode() and not success then
-                print(string.format("|cffFF6B6B[GuildWorkOrders Debug]|r Failed to queue batch %d", batchNum))
-            end
-        else
-            if Config.IsDebugMode() then
-                print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Batch %d/%d has no orders to send", 
-                    batchNum, batches))
-            end
+    else
+        if Config.IsDebugMode() then
+            print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Order details too long, shortening message: %s", errorMsg))
         end
     end
     
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sent heartbeat with %d orders", #ordersToSend))
+    -- Cleanup expired orders occasionally (every 60 heartbeats = 3 minutes)
+    if (heartbeatIndex % 60) == 0 then
+        Database.CleanupExpiredOrders()
     end
-    
-    -- Also cleanup expired orders during heartbeat
-    Database.CleanupExpiredOrders()
 end
 
 -- Handle heartbeat messages
@@ -1216,7 +1145,7 @@ function Sync.HandleHeartbeat(parts, sender)
             if #orderParts >= 13 then
                 -- Parse compressed heartbeat format
                 local timeAgo = tonumber(orderParts[7]) or 0
-                local ttl = tonumber(orderParts[8]) or 86400
+                local ttl = tonumber(orderParts[8]) or 1800
                 local encodedStatus = orderParts[10]
                 local fulfilledBy = UnescapeDelimiters(orderParts[13])
                 
@@ -1259,7 +1188,7 @@ function Sync.HandleHeartbeat(parts, sender)
                     quantity = tonumber(orderParts[5]),
                     price = UnescapeDelimiters(orderParts[6]),
                     timestamp = tonumber(orderParts[7]) or GetCurrentTime(),
-                    expiresAt = tonumber(orderParts[8]) or (GetCurrentTime() + 86400),
+                    expiresAt = tonumber(orderParts[8]) or (GetCurrentTime() + 1800),
                     version = tonumber(orderParts[9]) or 1,
                     status = orderParts[10],
                     pendingFulfiller = UnescapeDelimiters(orderParts[11]),
@@ -1343,10 +1272,10 @@ function Sync.StartHeartbeat()
         heartbeatTimer:Cancel()
     end
     
-    -- Send heartbeat every 30 seconds
-    heartbeatTimer = C_Timer.NewTicker(30, function()
+    -- Send heartbeat every 3 seconds (rotating through orders)
+    heartbeatTimer = C_Timer.NewTicker(3, function()
         if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Heartbeat timer triggered")
+            print("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting next order in rotation...")
         end
         Sync.SendHeartbeat()
     end)
@@ -1354,13 +1283,13 @@ function Sync.StartHeartbeat()
     -- Send initial heartbeat after 5 seconds
     C_Timer.After(5, function()
         if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Initial heartbeat triggered")
+            print("|cff00ff00[GuildWorkOrders Debug]|r Starting order sharing with guild...")
         end
         Sync.SendHeartbeat()
     end)
     
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Started heartbeat system")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Order sharing enabled - broadcasting every 3 seconds")
     end
 end
 

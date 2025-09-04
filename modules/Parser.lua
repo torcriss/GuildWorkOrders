@@ -299,7 +299,7 @@ function Parser.ProcessGuildMessage(message, sender)
     if sender == playerName then return end
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Processing message from %s: %s",
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Checking guild chat from %s: %s",
             sender, message))
     end
     
@@ -324,7 +324,7 @@ function Parser.ProcessGuildMessage(message, sender)
             priceInCopper = Database.ParsePriceToCopper(orderData.price),
             message = orderData.rawMessage,
             timestamp = time(),
-            expiresAt = time() + (Config.Get("orderExpiry") or 86400),
+            expiresAt = time() + (Config.Get("orderExpiry") or 1800),
             status = Database.STATUS.ACTIVE,
             version = 1
         }
@@ -336,8 +336,8 @@ function Parser.ProcessGuildMessage(message, sender)
         GuildWorkOrdersDB.orders[order.id] = order
         
         if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Created order from guild chat: %s %s %s",
-                orderData.type, orderData.itemName, orderData.price or "no price"))
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found %s order in guild chat: %s for %s",
+                orderData.type == "WTB" and "buy" or "sell", orderData.itemName, orderData.price or "negotiation"))
         end
         
         -- Trigger UI update if available

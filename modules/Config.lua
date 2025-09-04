@@ -11,7 +11,7 @@ local defaultConfig = {
     autoSync = true,              -- Auto-sync on login
     syncTimeout = 30,             -- Sync timeout in seconds
     maxHistory = 200,             -- Max orders to keep in history
-    orderExpiry = 86400,          -- 24 hours in seconds
+    orderExpiry = 1800,           -- 30 minutes in seconds
     debugMode = false,            -- Debug output
     soundAlert = true,            -- Play sound on new orders
     whisperTemplate = "Is your %s still available? I'm interested in %s for %s.",  -- %s = item, quantity, price
@@ -61,7 +61,7 @@ function Config.Load()
     Config.UpdateDatabase()
     
     if config.debugMode then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Config loaded")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Settings loaded from saved data")
     end
 end
 
@@ -108,14 +108,29 @@ function Config.UpdateDatabase()
     if not GuildWorkOrdersDB.syncData then
         GuildWorkOrdersDB.syncData = {
             lastSync = 0,
-            onlineUsers = {}
+            onlineUsers = {},
+            heartbeatIndex = 1  -- For rotating through orders in heartbeat
         }
+    end
+    
+    -- Initialize heartbeat index if missing
+    if not GuildWorkOrdersDB.syncData.heartbeatIndex then
+        GuildWorkOrdersDB.syncData.heartbeatIndex = 1
+    end
+    
+    -- Config migration: Update orderExpiry from 24 hours to 30 minutes
+    if GuildWorkOrdersDB.config and GuildWorkOrdersDB.config.orderExpiry == 86400 then
+        GuildWorkOrdersDB.config.orderExpiry = 1800
+        config.orderExpiry = 1800  -- Update in-memory config too
+        if config.debugMode then
+            print("|cff00ff00[GuildWorkOrders Debug]|r Updated order expiry time from 24 hours to 30 minutes")
+        end
     end
     
     -- Version migration if needed
     if not GuildWorkOrdersDB.version or GuildWorkOrdersDB.version ~= "1.0.0" then
         if config.debugMode then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Database version updated")
+            print("|cff00ff00[GuildWorkOrders Debug]|r Database structure upgraded")
         end
         GuildWorkOrdersDB.version = "1.0.0"
     end

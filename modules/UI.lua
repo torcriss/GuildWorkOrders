@@ -246,17 +246,7 @@ function UI.CreateSearchBar()
         UI.ShowNewOrderDialog()
     end)
     
-    -- Refresh button
-    local refreshBtn = CreateFrame("Button", nil, searchBar, "UIPanelButtonTemplate")
-    refreshBtn:SetSize(70, 25)
-    refreshBtn:SetPoint("RIGHT", newOrderBtn, "LEFT", -5, 0)
-    refreshBtn:SetText("Refresh")
-    refreshBtn:SetScript("OnClick", function()
-        UI.RefreshOrders()
-        if Sync and Sync.SendPing then
-            Sync.SendPing()  -- Refresh online users
-        end
-    end)
+    -- Refresh button removed (using heartbeat-only sync system)
     
     UI.searchBox = searchBox
 end
@@ -802,24 +792,28 @@ function UI.GetTTLDisplay(secondsLeft)
     
     local text, color
     
-    if hours >= 12 then
-        -- More than 12 hours - show hours, green
-        text = hours .. "h"
-        color = "|cff00ff00"  -- Green
-    elseif hours >= 2 then
-        -- 2-12 hours - show hours and minutes, yellow
+    if hours > 0 then
+        -- More than 1 hour - show hours and minutes, green
         if minutes > 0 then
             text = hours .. "h" .. minutes .. "m"
         else
             text = hours .. "h"
         end
+        color = "|cff00ff00"  -- Green
+    elseif minutes >= 20 then
+        -- 20-59 minutes - green (66%+ of 30min remaining)
+        text = minutes .. "m"
+        color = "|cff00ff00"  -- Green
+    elseif minutes >= 10 then
+        -- 10-19 minutes - yellow (33%-66% of 30min remaining)
+        text = minutes .. "m"
         color = "|cffFFD700"  -- Yellow/Gold
-    elseif hours >= 1 then
-        -- 1-2 hours - show hours and minutes, orange
-        text = hours .. "h" .. minutes .. "m"
+    elseif minutes >= 5 then
+        -- 5-9 minutes - orange (16%-33% of 30min remaining)
+        text = minutes .. "m"
         color = "|cffFFA500"  -- Orange
     else
-        -- Less than 1 hour - show minutes, red
+        -- Less than 5 minutes - red (critical)
         text = minutes .. "m"
         color = "|cffff0000"  -- Red
     end

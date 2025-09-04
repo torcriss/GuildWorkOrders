@@ -30,51 +30,20 @@ local function Initialize()
     print(string.format("|cff00ff00[GuildWorkOrders v%s]|r Loaded for %s (Level %d %s) - Type /gwo help for commands", 
         addon.version, playerName, level, class))
     
-    -- Auto-sync on login if enabled
-    if addon.Config and addon.Config.Get("autoSync") then
-        C_Timer.After(5, function()  -- Delay to let guild roster load
-            if addon.Config and addon.Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-sync timer: addon.Sync = %s", tostring(addon.Sync ~= nil)))
-                if addon.Sync then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-sync timer: RequestSync = %s, SendPing = %s", 
-                        tostring(addon.Sync.RequestSync ~= nil), tostring(addon.Sync.SendPing ~= nil)))
-                end
-            end
-            
-            if addon.Sync then
-                if addon.Sync.RequestSync then
-                    addon.Sync.RequestSync()
-                end
-                if addon.Sync.SendPing then
-                    addon.Sync.SendPing()
-                end
-            end
-        end)
+    -- Initialize ping system only (no auto-sync requests)
+    if addon.Config and addon.Config.IsDebugMode() then
+        print("|cff00ff00[GuildWorkOrders Debug]|r Full sync disabled - using heartbeat-only system")
     end
     
-    -- Frequent auto-sync timer (every 1 minute)
-    C_Timer.NewTicker(60, function()
-        if addon.Config and addon.Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Frequent timer: addon.Sync = %s", tostring(addon.Sync ~= nil)))
-            if addon.Sync then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Frequent timer: RequestSync = %s, SendPing = %s", 
-                    tostring(addon.Sync.RequestSync ~= nil), tostring(addon.Sync.SendPing ~= nil)))
+    -- Send ping on login to discover online users
+    if addon.Sync and addon.Sync.SendPing then
+        C_Timer.After(5, function()  -- Delay to let guild roster load
+            if addon.Config and addon.Config.IsDebugMode() then
+                print("|cff00ff00[GuildWorkOrders Debug]|r Discovering online guild members...")
             end
-        end
-        
-        if addon.Sync then
-            if addon.Sync.RequestSync then
-                addon.Sync.RequestSync()
-            end
-            if addon.Sync.SendPing then
-                addon.Sync.SendPing()
-            end
-        end
-        -- Also update status bar to refresh sync time
-        if addon.UI and addon.UI.UpdateStatusBar then
-            addon.UI.UpdateStatusBar()
-        end
-    end)
+            addon.Sync.SendPing()
+        end)
+    end
     
     -- Status bar refresh timer (every 30 seconds) to keep "time ago" display current
     C_Timer.NewTicker(30, function()
@@ -214,7 +183,7 @@ _G.GuildWorkOrders = {
     
     ForceSync = function()
         if addon.Sync then
-            addon.Sync.RequestSync()
+            -- Full sync disabled - only ping to discover users
             addon.Sync.SendPing()
             return true
         end

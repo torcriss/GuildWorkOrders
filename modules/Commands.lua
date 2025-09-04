@@ -326,9 +326,9 @@ end
 -- Force sync
 function Commands.ForceSync()
     if Sync then
-        Sync.RequestSync()
+        -- Full sync disabled - only ping to discover online users
         Sync.SendPing()
-        print("|cff00ff00[GuildWorkOrders]|r Requesting sync from guild...")
+        print("|cff00ff00[GuildWorkOrders]|r Discovering online guild members...")
     else
         print("|cffff0000[GuildWorkOrders]|r Sync not available")
     end
