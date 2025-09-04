@@ -98,7 +98,7 @@ The addon automatically detects WTB/WTS patterns in guild chat:
 ### Order Management
 - **Smart Limits** - Maximum 200 total orders, 10 active orders per user
 - **Automatic Cleanup** - Purges old history when database approaches limits
-- **Order Expiration** - Orders expire after 24 hours automatically
+- **Order Expiration** - Orders expire after 30 minutes automatically
 - **Order Actions** - Players can cancel or mark their own orders as fulfilled
 - **Full History** - Complete tracking of completed orders with status details
 - **Advanced Search** - Search and filter functionality with real-time updates
@@ -186,16 +186,23 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.5.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v2.5.1** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.5.0)
+## Recent Updates (v2.5.1)
+
+### 🐛 Bug Fixes & Improvements
+- **Expired Orders Display** - Fixed display of expired orders showing as "Expired" instead of "Cancelled"
+- **Windows Deploy Script** - Updated deployment script for Windows 11 environment compatibility
+- **Deployment Path** - Fixed Windows deployment destination path
+
+## Previous Updates (v2.5.0)
 
 ### 🚀 Major Performance & Efficiency Overhaul
 - **30-Minute Order Lifecycle** - Orders now expire after 30 minutes instead of 24 hours for faster turnover
 - **Revolutionary Heartbeat System** - 3-second rotating broadcasts replace 30-second full syncs
-- **4x Larger Database** - Increased capacity from 200 to 500 orders for high-traffic guilds
+- **Maintained Database** - Database capacity remains at 200 orders with optimized cleanup
 - **92% Network Load Reduction** - From 1,830 to 140 messages per minute for 60 users
-- **4x User Capacity** - Supports 60+ concurrent users vs previous 15 user limit
+- **Enhanced User Capacity** - Improved support for more concurrent users through optimized sync
 
 ### ⚡ Real-Time Optimization
 - **Rotating Order Broadcasts** - Each user shares 1 order every 3 seconds in round-robin fashion
