@@ -34,6 +34,12 @@ Database.LIMITS = {
     MAX_ACTIVE_PER_USER = 10
 }
 
+-- Purge time constants (in seconds)
+Database.PURGE_TIMES = {
+    CLEARED_CANCELLED_EXPIRED = 14400,  -- 4 hours for cleared/cancelled/expired orders
+    FULFILLED = 86400                    -- 24 hours for fulfilled orders
+}
+
 function Database.Initialize()
     Config = addon.Config
     Database.CleanupExpiredOrders()
@@ -730,7 +736,80 @@ function Database.CleanupExpiredOrders()
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d expired orders", expiredCount))
     end
     
+    -- After processing expired orders, purge old orders from history
+    local purgedCount = Database.PurgeOldOrders()
+    if purgedCount > 0 and Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-purged %d old orders during cleanup", purgedCount))
+    end
+    
     return expiredCount
+end
+
+-- Purge old orders from history based on status and age
+function Database.PurgeOldOrders()
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.history then
+        return 0
+    end
+    
+    local currentTime = GetCurrentTime()
+    local purgedCount = 0
+    local remainingHistory = {}
+    
+    for _, order in ipairs(GuildWorkOrdersDB.history) do
+        local shouldPurge = false
+        local completionTime = nil
+        
+        -- Determine completion time based on status
+        if order.status == Database.STATUS.CLEARED then
+            completionTime = order.clearedAt
+        elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+            completionTime = order.completedAt
+        elseif order.status == Database.STATUS.FULFILLED then
+            completionTime = order.fulfilledAt
+        end
+        
+        -- Check if order should be purged based on age and status
+        if completionTime then
+            local timeSinceCompletion = currentTime - completionTime
+            
+            if order.status == Database.STATUS.FULFILLED then
+                -- Purge fulfilled orders after 24 hours
+                shouldPurge = timeSinceCompletion > Database.PURGE_TIMES.FULFILLED
+            else
+                -- Purge cleared/cancelled/expired orders after 4 hours
+                shouldPurge = timeSinceCompletion > Database.PURGE_TIMES.CLEARED_CANCELLED_EXPIRED
+            end
+        else
+            -- If no completion time, treat as old and purge after 4 hours from general completedAt
+            if order.completedAt then
+                local timeSinceCompleted = currentTime - order.completedAt
+                shouldPurge = timeSinceCompleted > Database.PURGE_TIMES.CLEARED_CANCELLED_EXPIRED
+            else
+                -- No timestamp at all - keep it for now
+                shouldPurge = false
+            end
+        end
+        
+        if shouldPurge then
+            purgedCount = purgedCount + 1
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %s order: %s (age: %d seconds)", 
+                    order.status or "unknown", order.itemName or "Unknown", 
+                    completionTime and (currentTime - completionTime) or 0))
+            end
+        else
+            table.insert(remainingHistory, order)
+        end
+    end
+    
+    -- Update history with remaining orders
+    GuildWorkOrdersDB.history = remainingHistory
+    
+    if purgedCount > 0 and Config.IsDebugMode() then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %d old orders from history", purgedCount))
+    end
+    
+    return purgedCount
 end
 
 -- Get total order count (active + pending + history)
@@ -840,17 +919,51 @@ function Database.PurgeNonActiveOrders(targetCount)
         return 0
     end
     
-    -- Remove oldest history entries first (they're at the end of the array)
-    local historySize = #GuildWorkOrdersDB.history
-    local toPurge = math.min(needToPurge, historySize)
+    local remainingHistory = {}
+    local currentTime = GetCurrentTime()
     
-    for i = 1, toPurge do
-        table.remove(GuildWorkOrdersDB.history) -- Remove last (oldest) entry
-        purgeCount = purgeCount + 1
+    -- First priority: Remove all cleared/cancelled/expired orders regardless of age
+    local clearedPurged = 0
+    for _, order in ipairs(GuildWorkOrdersDB.history) do
+        if order.status == Database.STATUS.CLEARED or 
+           order.status == Database.STATUS.CANCELLED or 
+           order.status == Database.STATUS.EXPIRED then
+            clearedPurged = clearedPurged + 1
+            purgeCount = purgeCount + 1
+        else
+            table.insert(remainingHistory, order)
+        end
     end
     
+    -- If we still need to purge more, remove oldest fulfilled orders
+    if purgeCount < needToPurge and #remainingHistory > 0 then
+        -- Sort remaining history by completion time (oldest first)
+        table.sort(remainingHistory, function(a, b)
+            local timeA = a.fulfilledAt or a.completedAt or 0
+            local timeB = b.fulfilledAt or b.completedAt or 0
+            return timeA < timeB
+        end)
+        
+        local finalHistory = {}
+        local toKeep = #remainingHistory - (needToPurge - purgeCount)
+        
+        for i = 1, #remainingHistory do
+            if i > (needToPurge - purgeCount) then
+                table.insert(finalHistory, remainingHistory[i])
+            else
+                purgeCount = purgeCount + 1
+            end
+        end
+        
+        remainingHistory = finalHistory
+    end
+    
+    -- Update history with remaining orders
+    GuildWorkOrdersDB.history = remainingHistory
+    
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Removed %d old orders to make space (database limit: %d)", purgeCount, Database.LIMITS.MAX_TOTAL_ORDERS))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Emergency purge: removed %d cleared/cancelled/expired + %d oldest fulfilled orders (database limit: %d)", 
+            clearedPurged, purgeCount - clearedPurged, Database.LIMITS.MAX_TOTAL_ORDERS))
     end
     
     return purgeCount

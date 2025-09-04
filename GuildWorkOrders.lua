@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.5.1"
-addon.build = "Expired Orders UI Fix & Windows Deploy Script"
+addon.version = "2.6.0"
+addon.build = "Smart Order Purge System & UI Cleanup"
 
 -- Core initialization
 local function Initialize()

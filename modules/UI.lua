@@ -936,12 +936,6 @@ function UI.CreateStatusBar()
     end)
     onlineButton:SetScript("OnLeave", GameTooltip_Hide)
     
-    -- Sync status
-    local syncText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    syncText:SetPoint("LEFT", onlineText, "RIGHT", 20, 0)
-    syncText:SetText("Last sync: Never")
-    UI.syncText = syncText
-    
     -- Admin Clear button
     local adminBtn = CreateFrame("Button", nil, statusBar)
     adminBtn:SetSize(50, 18)
@@ -1059,25 +1053,6 @@ function UI.UpdateStatusBar()
         onlineCount = Sync.GetOnlineUserCount()
     end
     UI.onlineText:SetText(string.format("|cff00ff00• Online: %d|r", onlineCount + 1))
-    
-    -- Update sync status
-    local syncStatus = {}
-    if Sync.GetSyncStatus then
-        syncStatus = Sync.GetSyncStatus()
-    end
-    local syncText = "Never"
-    if syncStatus.lastSync and syncStatus.lastSync > 0 then
-        local timeAgo = UI.GetTimeAgo(syncStatus.lastSync)
-        if timeAgo == "Now" then
-            syncText = timeAgo
-        else
-            syncText = timeAgo .. " ago"
-        end
-    end
-    if syncStatus.inProgress then
-        syncText = "|cffFFD700Syncing...|r"
-    end
-    UI.syncText:SetText("Last sync: " .. syncText)
     
     -- Update last clear info
     if UI.clearText and Database then
