@@ -947,7 +947,7 @@ function UI.CreateStatusBar()
     -- Admin Clear button
     local adminBtn = CreateFrame("Button", nil, statusBar)
     adminBtn:SetSize(50, 18)
-    adminBtn:SetPoint("CENTER", statusBar, "CENTER", 0, 0)
+    adminBtn:SetPoint("LEFT", onlineText, "RIGHT", 15, 0)
     
     -- Create text
     local adminText = adminBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
