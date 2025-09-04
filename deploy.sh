@@ -3,9 +3,29 @@
 # Deploy script for GuildWorkOrders addon
 # Copies all addon files to WoW Classic Era AddOns directory
 
-# Source and destination paths
-SOURCE_DIR="/c/Users/Chris/GuildWorkOrders"
-DEST_DIR="/c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
+# Detect operating system
+OS_TYPE=$(uname -s)
+
+# Set source directory to current directory
+SOURCE_DIR="$(pwd)"
+
+# Set destination path based on operating system
+case "$OS_TYPE" in
+    "Darwin")
+        # macOS
+        DEST_DIR="/Applications/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
+        ;;
+    "MINGW"*|"CYGWIN"*|"MSYS"*)
+        # Windows (Git Bash, Cygwin, etc.)
+        DEST_DIR="/c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
+        ;;
+    *)
+        # Default fallback (Linux or other)
+        echo "Unsupported operating system: $OS_TYPE"
+        echo "Please manually set the WoW AddOns directory path."
+        exit 1
+        ;;
+esac
 
 echo "Deploying GuildWorkOrders addon..."
 echo "Source: $SOURCE_DIR"
