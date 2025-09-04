@@ -4,9 +4,8 @@
 # Copies all addon files to WoW Classic Era AddOns directory
 
 # Source and destination paths
-SOURCE_DIR="/home/chris/GuildWorkOrders"
+SOURCE_DIR="/c/Users/Chris/GuildWorkOrders"
 DEST_DIR="/c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
-PCLOUD_DIR="/home/chris/pCloudDrive/WoW/AddOns/GuildWorkOrders"
 
 echo "Deploying GuildWorkOrders addon..."
 echo "Source: $SOURCE_DIR"
@@ -54,25 +53,7 @@ echo ""
 echo "Module files:"
 find "$DEST_DIR/modules" -name "*.lua" | sort
 
-# Also sync to pCloudDrive for testing
-echo ""
-echo "Syncing to pCloudDrive..."
-echo "Destination: $PCLOUD_DIR"
-
-# Create pCloud directory if it doesn't exist
-if [ ! -d "$PCLOUD_DIR" ]; then
-    echo "Creating pCloudDrive directory..."
-    mkdir -p "$PCLOUD_DIR"
-fi
-
-# Copy all files from deployed location to pCloud
-cp -r "$DEST_DIR"/* "$PCLOUD_DIR"/
-
-if [ $? -eq 0 ]; then
-    echo "✓ Files synced to pCloudDrive"
-else
-    echo "✗ Warning: Failed to sync to pCloudDrive"
-fi
+# pCloud sync disabled for Windows environment
 
 echo ""
 echo "Deployment complete! 🚀"
