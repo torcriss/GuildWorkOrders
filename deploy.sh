@@ -5,7 +5,7 @@
 
 # Source and destination paths
 SOURCE_DIR="/home/chris/GuildWorkOrders"
-DEST_DIR="/home/chris/.var/app/com.usebottles.bottles/data/bottles/bottles/Games/drive_c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
+DEST_DIR="/c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/GuildWorkOrders"
 PCLOUD_DIR="/home/chris/pCloudDrive/WoW/AddOns/GuildWorkOrders"
 
 echo "Deploying GuildWorkOrders addon..."
