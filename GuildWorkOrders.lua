@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.4.2"
-addon.build = "Clear Order Bug Fixes & Performance Improvements"
+addon.version = "2.4.3"
+addon.build = "Fulfillment Sync & Duplicate Order Fixes"
 
 -- Core initialization
 local function Initialize()
