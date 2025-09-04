@@ -83,12 +83,27 @@ local function GetRelativeTimestamps(order)
     local currentTime = GetCurrentTime()
     local timeAgo = math.max(0, currentTime - (order.timestamp or 0))
     local ttl = math.max(0, (order.expiresAt or 0) - currentTime)
+    
+    -- If order is expired, send special marker TTL=-1
+    if order.expiresAt and order.expiresAt < currentTime then
+        ttl = -1
+    end
+    
     return timeAgo, ttl
 end
 
 local function RestoreAbsoluteTimestamps(timeAgo, ttl, currentTime)
     local timestamp = currentTime - timeAgo
-    local expiresAt = currentTime + ttl
+    local expiresAt
+    
+    -- Handle special marker for expired orders
+    if ttl == -1 then
+        -- Set expiry to 1 second ago to ensure it shows as expired
+        expiresAt = currentTime - 1
+    else
+        expiresAt = currentTime + ttl
+    end
+    
     return timestamp, expiresAt
 end
 
