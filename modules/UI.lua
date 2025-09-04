@@ -488,14 +488,17 @@ function UI.CreateOrderRow(order, index)
     timeText:SetWidth(60)
     timeText:SetJustifyH("CENTER")
     
-    -- Show TTL countdown for active orders, "-" for completed orders
-    if order.status == Database.STATUS.ACTIVE and order.expiresAt then
+    -- Show TTL countdown for active orders, "-" for completed/expired orders
+    if order.expiresAt and order.expiresAt < GetCurrentTime() then
+        -- Expired order - show dash (like cancelled orders)
+        timeText:SetText("|cff888888-|r")
+    elseif order.status == Database.STATUS.ACTIVE and order.expiresAt then
         local timeLeft = order.expiresAt - GetCurrentTime()
         if timeLeft > 0 then
             local ttlText, color = UI.GetTTLDisplay(timeLeft)
             timeText:SetText(color .. ttlText .. "|r")
         else
-            timeText:SetText("|cffff0000Expired|r")
+            timeText:SetText("|cff888888-|r")  -- Safety fallback
         end
     elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED or order.status == Database.STATUS.CLEARED then
         -- Show "-" for completed orders to avoid timestamp fluctuations
@@ -536,8 +539,9 @@ function UI.CreateOrderRow(order, index)
         end
         
         -- Show action buttons for active orders, completed timestamp for others
-        if order.status == Database.STATUS.ACTIVE then
-            -- Action button for active orders
+        if order.status == Database.STATUS.ACTIVE and 
+           (not order.expiresAt or order.expiresAt > GetCurrentTime()) then
+            -- Action button for truly active (non-expired) orders only
             local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             actionBtn:SetSize(80, 20)
             actionBtn:SetPoint("LEFT", 695, 0)
