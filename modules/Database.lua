@@ -458,6 +458,20 @@ function Database.SyncOrder(orderData)
             GuildWorkOrdersDB.orders[orderData.id] = nil
         end
     else
+        -- Before putting an order back in active orders, check if we already have it as completed
+        if orderData.status == Database.STATUS.ACTIVE then
+            -- Check if this order is already in our history as completed
+            local existingInHistory = Database.FindInHistory(orderData.id)
+            if existingInHistory and (existingInHistory.status == Database.STATUS.FULFILLED or 
+                                      existingInHistory.status == Database.STATUS.CANCELLED) then
+                -- Don't reactivate a completed order
+                if Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring heartbeat for already completed order: %s", orderData.id))
+                end
+                return true
+            end
+        end
+        
         -- Active/pending orders go to active orders table
         GuildWorkOrdersDB.orders[orderData.id] = orderData
     end
@@ -513,6 +527,17 @@ function Database.GetHistory()
     end
     
     return history
+end
+
+-- Find order in history by ID
+function Database.FindInHistory(orderID)
+    local history = GuildWorkOrdersDB.history or {}
+    for _, order in ipairs(history) do
+        if order.id == orderID then
+            return order
+        end
+    end
+    return nil
 end
 
 -- Get all orders unified (active + history)
