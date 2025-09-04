@@ -516,8 +516,10 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cff00ccffPending|r")
         elseif order.status == Database.STATUS.FULFILLED then
             statusText:SetText("|cff00ff00Completed|r")
-        elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+        elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
+        elseif order.status == Database.STATUS.EXPIRED then
+            statusText:SetText("|cffffff00Expired|r")
         elseif order.status == Database.STATUS.CLEARED then
             statusText:SetText("|cff888888Cleared|r")
         elseif order.status == Database.STATUS.FAILED then
@@ -624,8 +626,10 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cff00ccffPending|r")
             elseif order.status == Database.STATUS.FULFILLED then
                 statusText:SetText("|cff00ff00Completed|r")
-            elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+            elseif order.status == Database.STATUS.CANCELLED then
                 statusText:SetText("|cffff8080Cancelled|r")
+            elseif order.status == Database.STATUS.EXPIRED then
+                statusText:SetText("|cfffff080Expired|r")
             elseif order.status == Database.STATUS.CLEARED then
                 statusText:SetText("|cff888888Cleared|r")
             elseif order.status == Database.STATUS.FAILED then
