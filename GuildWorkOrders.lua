@@ -1,6 +1,6 @@
 -- GuildWorkOrders Addon for WoW Classic Era (Interface 11507)
 -- Guild-wide work order management system with hidden synchronization
--- Version 1.0.0
+-- Version 2.5.0
 
 local addonName, addon = ...
 addon = addon or {}
@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.4.3"
-addon.build = "Fulfillment Sync & Duplicate Order Fixes"
+addon.version = "2.5.0"
+addon.build = "Optimized Heartbeat System & 30min Order Expiry"
 
 -- Core initialization
 local function Initialize()
