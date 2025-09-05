@@ -511,7 +511,12 @@ function Database.MoveToHistory(order)
     
     -- Add completion timestamp only if not already set
     if not order.completedAt then
-        order.completedAt = GetCurrentTime()
+        if order.status == Database.STATUS.EXPIRED and order.expiresAt then
+            -- For expired orders, use the expiry time as completion time
+            order.completedAt = order.expiresAt
+        else
+            order.completedAt = GetCurrentTime()
+        end
     end
     
     table.insert(GuildWorkOrdersDB.history, 1, order)
