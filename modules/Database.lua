@@ -436,6 +436,9 @@ function Database.SyncOrder(orderData)
         if existingOrder.clearedAt and not orderData.clearedAt then
             orderData.clearedAt = existingOrder.clearedAt
         end
+        if existingOrder.purgedAt and not orderData.purgedAt then
+            orderData.purgedAt = existingOrder.purgedAt
+        end
     end
     
     -- All orders stay in single database regardless of status

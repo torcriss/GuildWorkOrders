@@ -616,7 +616,7 @@ function Sync.SendHeartbeat()
     local timeAgo, ttl = GetRelativeTimestamps(order)
     local encodedStatus = EncodeStatus(order.status)
     
-    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s:%s:%d:%d:%d:%d",
+    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s:%s:%d:%d:%d:%d:%d",
         order.id,
         order.type,
         order.player,
@@ -634,7 +634,8 @@ function Sync.SendHeartbeat()
         order.cancelledAt or 0,
         order.expiredAt or 0,
         order.completedAt or 0,
-        order.clearedAt or 0
+        order.clearedAt or 0,
+        order.purgedAt or 0
     )
     
     local heartbeatMessage = string.format("%s|%d|%d|%d|%s",
@@ -676,8 +677,8 @@ function Sync.HandleHeartbeat(parts, sender)
     for _, orderStr in ipairs(orderStrings) do
         if orderStr and orderStr ~= "" then
             local orderParts = {strsplit(":", orderStr)}
-            if #orderParts >= 18 then
-                -- Parse new format with status timestamps
+            if #orderParts >= 19 then
+                -- Parse new format with status timestamps including purgedAt
                 local timeAgo = tonumber(orderParts[7]) or 0
                 local ttl = tonumber(orderParts[8]) or 60
                 local encodedStatus = orderParts[10]
@@ -706,7 +707,8 @@ function Sync.HandleHeartbeat(parts, sender)
                     cancelledAt = tonumber(orderParts[15]) or nil,
                     expiredAt = tonumber(orderParts[16]) or nil,
                     completedAt = tonumber(orderParts[17]) or nil,
-                    clearedAt = tonumber(orderParts[18]) or nil
+                    clearedAt = tonumber(orderParts[18]) or nil,
+                    purgedAt = tonumber(orderParts[19]) or nil
                 }
                 
                 -- Convert 0 timestamps to nil
@@ -714,6 +716,7 @@ function Sync.HandleHeartbeat(parts, sender)
                 if orderData.expiredAt == 0 then orderData.expiredAt = nil end
                 if orderData.completedAt == 0 then orderData.completedAt = nil end
                 if orderData.clearedAt == 0 then orderData.clearedAt = nil end
+                if orderData.purgedAt == 0 then orderData.purgedAt = nil end
                 
                 -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
                 -- Handle both with and without realm suffix in sender name
