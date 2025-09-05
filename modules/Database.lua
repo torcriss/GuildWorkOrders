@@ -29,8 +29,7 @@ Database.TYPE = {
 
 -- Database limit constants
 Database.LIMITS = {
-    MAX_TOTAL_ORDERS = 500,
-    MAX_ACTIVE_PER_USER = 10
+    MAX_DISPLAY_ORDERS = 50
 }
 
 -- Purge time constants (in seconds)
@@ -56,21 +55,8 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     local playerName = UnitName("player")
     local realm = GetRealmName()
     
-    -- Check if we can create a new order (limits)
-    local canCreate, errorMsg = Database.CanCreateOrder(playerName)
-    if not canCreate then
-        print(string.format("|cffFF6B6B[GuildWorkOrders]|r %s", errorMsg))
-        return nil, errorMsg
-    end
-    
-    -- Check if we need to purge old history to make room
-    local totalCount = Database.GetTotalOrderCount()
-    if totalCount >= Database.LIMITS.MAX_TOTAL_ORDERS then
-        local purged = Database.PurgeNonActiveOrders(Database.LIMITS.MAX_TOTAL_ORDERS - 1)
-        if purged > 0 then
-            print(string.format("|cffFFAA00[GuildWorkOrders]|r Purged %d old history entries to make room for new order", purged))
-        end
-    end
+    -- Implement FIFO: if we have 50+ orders, remove the oldest
+    Database.EnforceDisplayLimit()
     
     -- Parse item name from link
     local itemName = itemLink
@@ -831,21 +817,6 @@ function Database.GetTotalOrderCount()
 end
 
 -- Get active order count for a specific user
-function Database.GetUserActiveOrderCount(playerName)
-    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
-        return 0
-    end
-    
-    local count = 0
-    for _, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.player == playerName and 
-           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
-            count = count + 1
-        end
-    end
-    
-    return count
-end
 
 -- Get total active order count
 function Database.GetActiveOrderCount()
@@ -968,21 +939,55 @@ function Database.PurgeNonActiveOrders(targetCount)
     return purgeCount
 end
 
--- Check if we can create a new order (respects all limits)
-function Database.CanCreateOrder(playerName)
-    -- Check per-user limit
-    local userActiveCount = Database.GetUserActiveOrderCount(playerName)
-    if userActiveCount >= Database.LIMITS.MAX_ACTIVE_PER_USER then
-        return false, string.format("You have reached the maximum of %d active orders per user", Database.LIMITS.MAX_ACTIVE_PER_USER)
+-- Enforce FIFO display limit (keep only 50 most recent orders)
+function Database.EnforceDisplayLimit()
+    local allOrders = {}
+    
+    -- Collect all orders (active + history) with timestamps
+    if GuildWorkOrdersDB.orders then
+        for _, order in pairs(GuildWorkOrdersDB.orders) do
+            table.insert(allOrders, {order = order, timestamp = order.timestamp or 0, location = "active"})
+        end
     end
     
-    -- Check total active orders limit
-    local totalActiveCount = Database.GetActiveOrderCount()
-    if totalActiveCount >= Database.LIMITS.MAX_TOTAL_ORDERS then
-        return false, string.format("Maximum of %d active orders reached. Cannot create new orders until some are completed", Database.LIMITS.MAX_TOTAL_ORDERS)
+    if GuildWorkOrdersDB.history then
+        for _, order in ipairs(GuildWorkOrdersDB.history) do
+            local timestamp = order.timestamp or order.completedAt or order.fulfilledAt or 0
+            table.insert(allOrders, {order = order, timestamp = timestamp, location = "history"})
+        end
     end
     
-    return true, nil
+    -- If we have 50 or fewer orders, no action needed
+    if #allOrders <= Database.LIMITS.MAX_DISPLAY_ORDERS then
+        return
+    end
+    
+    -- Sort by timestamp (oldest first)
+    table.sort(allOrders, function(a, b) 
+        return a.timestamp < b.timestamp 
+    end)
+    
+    -- Remove oldest orders until we have exactly 50
+    local toRemove = #allOrders - Database.LIMITS.MAX_DISPLAY_ORDERS
+    for i = 1, toRemove do
+        local orderData = allOrders[i]
+        if orderData.location == "active" then
+            -- Remove from active orders
+            if GuildWorkOrdersDB.orders then
+                GuildWorkOrdersDB.orders[orderData.order.id] = nil
+            end
+        else
+            -- Remove from history
+            if GuildWorkOrdersDB.history then
+                for j, historyOrder in ipairs(GuildWorkOrdersDB.history) do
+                    if historyOrder.id == orderData.order.id then
+                        table.remove(GuildWorkOrdersDB.history, j)
+                        break
+                    end
+                end
+            end
+        end
+    end
 end
 
 -- Helper function to parse price string to copper

@@ -997,27 +997,16 @@ end
 function UI.UpdateCreateButtonStates()
     if not Database then return end
     
-    local playerName = UnitName("player")
-    local canCreate, errorMsg = Database.CanCreateOrder(playerName)
-    
-    -- Update New Order button
+    -- Update New Order button - always enabled now (no limits)
     if newOrderBtn then
-        newOrderBtn:SetEnabled(canCreate)
-        if canCreate then
-            newOrderBtn:SetAlpha(1.0)
-        else
-            newOrderBtn:SetAlpha(0.6)
-        end
+        newOrderBtn:SetEnabled(true)
+        newOrderBtn:SetAlpha(1.0)
         
         -- Update tooltip
         newOrderBtn:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if canCreate then
-                GameTooltip:SetText("Create a new work order", 1, 1, 1)
-            else
-                GameTooltip:SetText("Cannot create order", 1, 0.3, 0.3)
-                GameTooltip:AddLine(errorMsg, 1, 1, 1, true)
-            end
+            GameTooltip:SetText("Create a new work order", 1, 1, 1)
+            GameTooltip:AddLine("No limits - create as many as you want!", 0.8, 0.8, 0.8)
             GameTooltip:Show()
         end)
         newOrderBtn:SetScript("OnLeave", function(self)
@@ -1025,29 +1014,14 @@ function UI.UpdateCreateButtonStates()
         end)
     end
     
-    -- Update Create Order button in dialog
+    -- Update Create Order button in dialog - always enabled
     if createOrderBtn then
-        createOrderBtn:SetEnabled(canCreate)
-        if canCreate then
-            createOrderBtn:SetAlpha(1.0)
-        else
-            createOrderBtn:SetAlpha(0.6)
-        end
+        createOrderBtn:SetEnabled(true)
+        createOrderBtn:SetAlpha(1.0)
         
-        -- Update tooltip
-        createOrderBtn:SetScript("OnEnter", function(self)
-            if not canCreate then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Cannot create order", 1, 0.3, 0.3)
-                GameTooltip:AddLine(errorMsg, 1, 1, 1, true)
-                GameTooltip:Show()
-            end
-        end)
-        createOrderBtn:SetScript("OnLeave", function(self)
-            if not canCreate then
-                GameTooltip:Hide()
-            end
-        end)
+        -- Remove tooltip (no longer needed)
+        createOrderBtn:SetScript("OnEnter", nil)
+        createOrderBtn:SetScript("OnLeave", nil)
     end
 end
 
@@ -1077,31 +1051,11 @@ function UI.UpdateStatusBar()
         UI.clearText:SetText("|cffFF6B6BLast clear: " .. clearText .. "|r")
     end
     
-    -- Update order counts
-    local activeOrders = Database.GetAllOrders()  -- Gets only active orders
+    -- Update order counts - simple total display only
     local totalCount = Database.GetTotalOrderCount()  -- Total orders including history
-    local playerName = UnitName("player")
-    local userActiveCount = Database.GetUserActiveOrderCount(playerName)
-    local maxUserActive = Database.LIMITS.MAX_ACTIVE_PER_USER
+    local totalText = string.format("Total Orders: %d", totalCount)
     
-    -- Show user's active orders with limit
-    local userText = string.format("My Active: %d/%d", userActiveCount, maxUserActive)
-    if userActiveCount >= maxUserActive then
-        userText = "|cffFF6B6B" .. userText .. "|r"  -- Red when at limit
-    elseif userActiveCount >= maxUserActive - 1 then
-        userText = "|cffFFAA00" .. userText .. "|r"  -- Orange when near limit
-    end
-    
-    -- Show total orders with limit
-    local maxTotalOrders = Database.LIMITS.MAX_TOTAL_ORDERS
-    local totalText = string.format("Total Orders: %d/%d", totalCount, maxTotalOrders)
-    if totalCount >= maxTotalOrders then
-        totalText = "|cffFF6B6B" .. totalText .. "|r"  -- Red when at limit
-    elseif totalCount >= maxTotalOrders - 10 then
-        totalText = "|cffFFAA00" .. totalText .. "|r"  -- Orange when near limit (within 10)
-    end
-    
-    UI.countText:SetText(string.format("%s | %s", userText, totalText))
+    UI.countText:SetText(totalText)
 end
 
 -- Show online users tooltip
@@ -1422,10 +1376,7 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
     -- Create the order
     local order = Database.CreateOrder(orderType, itemLink, quantity, price)
     if order then
-        -- Broadcast to other users
-        if Sync and Sync.BroadcastNewOrder then
-            Sync.BroadcastNewOrder(order)
-        end
+        -- Order will be shared via heartbeat system (no immediate broadcast)
         
         -- Announce to guild if requested
         if announceCheck:GetChecked() then
