@@ -617,6 +617,9 @@ function UI.CreateOrderRow(order, index)
             completedText:SetJustifyH("LEFT")
             if order.completedAt then
                 completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
+            elseif order.status == Database.STATUS.EXPIRED and order.expiresAt then
+                -- For expired orders without completedAt (from heartbeats), use expiresAt
+                completedText:SetText("|cff888888" .. UI.FormatDateTime(order.expiresAt) .. "|r")
             else
                 completedText:SetText("|cff888888-|r")
             end
