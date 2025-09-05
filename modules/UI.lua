@@ -607,18 +607,8 @@ function UI.CreateOrderRow(order, index)
                 -- Store reference for cleanup
                 row.adminClearButton = adminClearBtn
             end
-        else
-            -- Completion timestamp for completed orders
-            local completedText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            completedText:SetPoint("LEFT", 695, 0)
-            completedText:SetWidth(90)  -- Increased width for date/time format
-            completedText:SetJustifyH("LEFT")
-            if order.completedAt then
-                completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
-            else
-                completedText:SetText("|cff888888-|r")
-            end
         end
+        -- Completion timestamp removed - redundant with action button showing "Completed"
         
         -- Cancelled orders cannot be admin cleared (they are already resolved)
     else
