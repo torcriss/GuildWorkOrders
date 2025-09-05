@@ -616,7 +616,7 @@ function Sync.SendHeartbeat()
     local timeAgo, ttl = GetRelativeTimestamps(order)
     local encodedStatus = EncodeStatus(order.status)
     
-    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s:%s",
+    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s:%s:%d:%d:%d:%d",
         order.id,
         order.type,
         order.player,
@@ -630,7 +630,11 @@ function Sync.SendHeartbeat()
         EscapeDelimiters(order.pendingFulfiller or ""),
         order.pendingTimestamp or 0,
         EscapeDelimiters(order.completedBy or ""),
-        EscapeDelimiters(order.clearedBy or "")
+        EscapeDelimiters(order.clearedBy or ""),
+        order.cancelledAt or 0,
+        order.expiredAt or 0,
+        order.completedAt or 0,
+        order.clearedAt or 0
     )
     
     local heartbeatMessage = string.format("%s|%d|%d|%d|%s",
@@ -672,8 +676,46 @@ function Sync.HandleHeartbeat(parts, sender)
     for _, orderStr in ipairs(orderStrings) do
         if orderStr and orderStr ~= "" then
             local orderParts = {strsplit(":", orderStr)}
-            if #orderParts >= 14 then
-                -- Parse compressed heartbeat format with clearedBy field
+            if #orderParts >= 18 then
+                -- Parse new format with status timestamps
+                local timeAgo = tonumber(orderParts[7]) or 0
+                local ttl = tonumber(orderParts[8]) or 60
+                local encodedStatus = orderParts[10]
+                local completedBy = UnescapeDelimiters(orderParts[13])
+                local clearedBy = UnescapeDelimiters(orderParts[14])
+                
+                -- Restore absolute timestamps
+                local currentTime = GetCurrentTime()
+                local timestamp, expiresAt = RestoreAbsoluteTimestamps(timeAgo, ttl, currentTime)
+                
+                local orderData = {
+                    id = orderParts[1],
+                    type = orderParts[2],
+                    player = orderParts[3],
+                    itemLink = UnescapeDelimiters(orderParts[4]),
+                    quantity = tonumber(orderParts[5]),
+                    price = UnescapeDelimiters(orderParts[6]),
+                    timestamp = timestamp,
+                    expiresAt = expiresAt,
+                    version = tonumber(orderParts[9]) or 1,
+                    status = DecodeStatus(encodedStatus),
+                    pendingFulfiller = UnescapeDelimiters(orderParts[11]),
+                    pendingTimestamp = tonumber(orderParts[12]) or 0,
+                    completedBy = completedBy ~= "" and completedBy or nil,
+                    clearedBy = clearedBy ~= "" and clearedBy or nil,
+                    cancelledAt = tonumber(orderParts[15]) or nil,
+                    expiredAt = tonumber(orderParts[16]) or nil,
+                    completedAt = tonumber(orderParts[17]) or nil,
+                    clearedAt = tonumber(orderParts[18]) or nil
+                }
+                
+                -- Convert 0 timestamps to nil
+                if orderData.cancelledAt == 0 then orderData.cancelledAt = nil end
+                if orderData.expiredAt == 0 then orderData.expiredAt = nil end
+                if orderData.completedAt == 0 then orderData.completedAt = nil end
+                if orderData.clearedAt == 0 then orderData.clearedAt = nil end
+            elseif #orderParts >= 14 then
+                -- Parse compressed heartbeat format with clearedBy field (backward compatibility)
                 local timeAgo = tonumber(orderParts[7]) or 0
                 local ttl = tonumber(orderParts[8]) or 60
                 local encodedStatus = orderParts[10]

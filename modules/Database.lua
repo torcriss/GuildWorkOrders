@@ -425,6 +425,22 @@ function Database.SyncOrder(orderData)
         orderData.completedBy = existingOrder.completedBy
     end
     
+    -- Preserve status timestamps if they exist locally but not in incoming data
+    if existingOrder then
+        if existingOrder.cancelledAt and not orderData.cancelledAt then
+            orderData.cancelledAt = existingOrder.cancelledAt
+        end
+        if existingOrder.expiredAt and not orderData.expiredAt then
+            orderData.expiredAt = existingOrder.expiredAt
+        end
+        if existingOrder.completedAt and not orderData.completedAt then
+            orderData.completedAt = existingOrder.completedAt
+        end
+        if existingOrder.clearedAt and not orderData.clearedAt then
+            orderData.clearedAt = existingOrder.clearedAt
+        end
+    end
+    
     -- All orders stay in single database regardless of status
     GuildWorkOrdersDB.orders[orderData.id] = orderData
     
