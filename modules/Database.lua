@@ -38,43 +38,7 @@ Database.PURGE_TIMES = {
 
 function Database.Initialize()
     Config = addon.Config
-    
-    -- Migrate existing history to single database
-    Database.MigrateHistoryToSingleDatabase()
-    
     Database.CleanupExpiredOrders()
-end
-
--- Migrate existing history data to single orders database
-function Database.MigrateHistoryToSingleDatabase()
-    if not GuildWorkOrdersDB then
-        return
-    end
-    
-    -- Ensure orders database exists
-    if not GuildWorkOrdersDB.orders then
-        GuildWorkOrdersDB.orders = {}
-    end
-    
-    -- Migrate history orders if they exist
-    if GuildWorkOrdersDB.history then
-        local migratedCount = 0
-        
-        for _, historyOrder in ipairs(GuildWorkOrdersDB.history) do
-            -- Only migrate if order doesn't already exist in main database
-            if not GuildWorkOrdersDB.orders[historyOrder.id] then
-                GuildWorkOrdersDB.orders[historyOrder.id] = historyOrder
-                migratedCount = migratedCount + 1
-            end
-        end
-        
-        if Config.IsDebugMode() and migratedCount > 0 then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Migrated %d orders from history to single database", migratedCount))
-        end
-        
-        -- Clear old history database
-        GuildWorkOrdersDB.history = nil
-    end
 end
 
 -- Generate unique order ID
@@ -245,43 +209,7 @@ function Database.GetMyOrders()
     return myOrders
 end
 
--- Get orders created by me (for heartbeat broadcasting)
-function Database.GetMyCreatedOrders()
-    local playerName = UnitName("player")
-    local myOrders = {}
-    
-    -- Get active/pending orders I created
-    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
-        for _, order in pairs(GuildWorkOrdersDB.orders) do
-            if order.player == playerName then
-                table.insert(myOrders, order)
-            end
-        end
-    end
-    
-    -- Get recently completed orders I created (from history) - only within last 24 hours
-    local currentTime = GetCurrentTime()
-    local history = Database.GetHistory()
-    for _, order in ipairs(history) do
-        if order.player == playerName then
-            -- Only include recently completed orders (within 24 hours)
-            local timeSinceCompleted = nil
-            if order.completedAt then
-                timeSinceCompleted = currentTime - order.completedAt
-            elseif order.fulfilledAt then
-                timeSinceCompleted = currentTime - order.fulfilledAt
-            elseif order.expiredAt then
-                timeSinceCompleted = currentTime - order.expiredAt
-            end
-            
-            if timeSinceCompleted and timeSinceCompleted < 60 then -- 1 minute
-                table.insert(myOrders, order)
-            end
-        end
-    end
-    
-    return myOrders
-end
+-- REMOVED: GetMyCreatedOrders - using GetOrdersToHeartbeat instead
 
 -- Get orders to broadcast via heartbeat (created by me, fulfilled by me, OR any fulfilled order for relay)
 function Database.GetOrdersToHeartbeat()
@@ -516,34 +444,8 @@ function Database.SyncOrder(orderData)
         orderData.fulfilledBy = existingOrder.fulfilledBy
     end
     
-    -- Route order to appropriate storage based on status
-    if orderData.status == Database.STATUS.FULFILLED or 
-       orderData.status == Database.STATUS.CANCELLED or 
-       orderData.status == Database.STATUS.CLEARED or
-       orderData.status == Database.STATUS.FAILED then
-        -- Completed orders go to history, remove from active orders
-        Database.MoveToHistory(orderData)
-        if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id] then
-            GuildWorkOrdersDB.orders[orderData.id] = nil
-        end
-    else
-        -- Before putting an order back in active orders, check if we already have it as completed
-        if orderData.status == Database.STATUS.ACTIVE then
-            -- Check if this order is already in our history as completed
-            local existingInHistory = Database.FindInHistory(orderData.id)
-            if existingInHistory and (existingInHistory.status == Database.STATUS.FULFILLED or 
-                                      existingInHistory.status == Database.STATUS.CANCELLED) then
-                -- Don't reactivate a completed order
-                if Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring heartbeat for already completed order: %s", orderData.id))
-                end
-                return true
-            end
-        end
-        
-        -- Active/pending orders go to active orders table
-        GuildWorkOrdersDB.orders[orderData.id] = orderData
-    end
+    -- All orders stay in single database regardless of status
+    GuildWorkOrdersDB.orders[orderData.id] = orderData
     
     if Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received order update: %s from %s",
@@ -559,7 +461,7 @@ end
 
 -- REMOVED: FindInHistory - using single database
 
--- Get all orders unified (active + history)
+-- Get all orders from single database
 function Database.GetAllOrdersUnified()
     local allOrders = {}
     
@@ -572,13 +474,7 @@ function Database.GetAllOrdersUnified()
         end
     end
     
-    -- Get all history orders
-    local history = GuildWorkOrdersDB.history or {}
-    for _, order in ipairs(history) do
-        -- Clean up any corrupted item names in history
-        Database.CleanItemName(order)
-        table.insert(allOrders, order)
-    end
+    -- Single database - no history to merge
     
     -- Sort by timestamp (newest first)
     table.sort(allOrders, function(a, b)
@@ -647,15 +543,14 @@ function Database.BroadcastClearAll(callback)
     return true
 end
 
--- Clear all database data (orders, history, keep config)
+-- Clear all database data (orders only, keep config)
 function Database.ClearAllData()
     if not GuildWorkOrdersDB then
         return false
     end
     
-    -- Clear orders and history but preserve config and sync data structure
+    -- Clear all orders from single database but preserve config and sync data structure
     GuildWorkOrdersDB.orders = {}
-    GuildWorkOrdersDB.history = {}
     
     -- Reset sync data but keep structure
     if GuildWorkOrdersDB.syncData then
@@ -755,14 +650,7 @@ function Database.CleanupExpiredOrders()
                     -- Use UpdateOrderStatus to properly handle the expiry
                     Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
                     
-                    -- Add expiry timestamp (after status update since order might be moved)
-                    -- Find the order in history to add expiredAt timestamp
-                    for _, historyOrder in ipairs(GuildWorkOrdersDB.history or {}) do
-                        if historyOrder.id == orderID then
-                            historyOrder.expiredAt = currentTime
-                            break
-                        end
-                    end
+                    -- Order status is updated in single database with expiredAt timestamp
                     
                     expiredCount = expiredCount + 1
                     
@@ -800,92 +688,19 @@ function Database.CleanupExpiredOrders()
     return expiredCount
 end
 
--- REMOVED: Time-based purging replaced with FIFO-only system
--- Purge old orders from history based on status and age
---[[
-function Database.PurgeOldOrders()
-    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.history then
-        return 0
-    end
-    
-    local currentTime = GetCurrentTime()
-    local purgedCount = 0
-    local remainingHistory = {}
-    
-    for _, order in ipairs(GuildWorkOrdersDB.history) do
-        local shouldPurge = false
-        local completionTime = nil
-        
-        -- Determine completion time based on status
-        if order.status == Database.STATUS.CLEARED then
-            completionTime = order.clearedAt
-        elseif order.status == Database.STATUS.CANCELLED then
-            completionTime = order.completedAt
-        elseif order.status == Database.STATUS.FULFILLED then
-            completionTime = order.fulfilledAt
-        end
-        
-        -- Check if order should be purged based on age and status
-        if completionTime then
-            local timeSinceCompletion = currentTime - completionTime
-            
-            if order.status == Database.STATUS.FULFILLED then
-                -- Purge fulfilled orders after 24 hours
-                shouldPurge = timeSinceCompletion > Database.PURGE_TIMES.FULFILLED
-            else
-                -- Purge cleared/cancelled/expired orders after 4 hours
-                shouldPurge = timeSinceCompletion > Database.PURGE_TIMES.CLEARED_CANCELLED_EXPIRED
-            end
-        else
-            -- If no completion time, treat as old and purge after 4 hours from general completedAt
-            if order.completedAt then
-                local timeSinceCompleted = currentTime - order.completedAt
-                shouldPurge = timeSinceCompleted > Database.PURGE_TIMES.CLEARED_CANCELLED_EXPIRED
-            else
-                -- No timestamp at all - keep it for now
-                shouldPurge = false
-            end
-        end
-        
-        if shouldPurge then
-            purgedCount = purgedCount + 1
-            if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %s order: %s (age: %d seconds)", 
-                    order.status or "unknown", order.itemName or "Unknown", 
-                    completionTime and (currentTime - completionTime) or 0))
-            end
-        else
-            table.insert(remainingHistory, order)
-        end
-    end
-    
-    -- Update history with remaining orders
-    GuildWorkOrdersDB.history = remainingHistory
-    
-    if purgedCount > 0 and Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Purged %d old orders from history", purgedCount))
-    end
-    
-    return purgedCount
-end
---]]
+-- REMOVED: Old purging system - replaced with CleanupOldOrders
 
--- Get total order count (active + pending + history)
+-- Get total order count from single database
 function Database.GetTotalOrderCount()
-    local activeCount = 0
-    local historyCount = 0
+    local totalCount = 0
     
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for _, order in pairs(GuildWorkOrdersDB.orders) do
-            activeCount = activeCount + 1
+            totalCount = totalCount + 1
         end
     end
     
-    if GuildWorkOrdersDB and GuildWorkOrdersDB.history then
-        historyCount = #GuildWorkOrdersDB.history
-    end
-    
-    return activeCount + historyCount
+    return totalCount
 end
 
 -- Get active order count for a specific user
@@ -948,68 +763,7 @@ function Database.IsOrderPreClear(orderTimestamp)
     return clearTimestamp > 0 and (orderTimestamp or 0) < clearTimestamp
 end
 
--- Purge non-active orders from history to make room for new orders
-function Database.PurgeNonActiveOrders(targetCount)
-    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.history then
-        return 0
-    end
-    
-    local purgeCount = 0
-    local currentTotal = Database.GetTotalOrderCount()
-    local needToPurge = currentTotal - targetCount
-    
-    if needToPurge <= 0 then
-        return 0
-    end
-    
-    local remainingHistory = {}
-    local currentTime = GetCurrentTime()
-    
-    -- First priority: Remove all cleared/cancelled/expired orders regardless of age
-    local clearedPurged = 0
-    for _, order in ipairs(GuildWorkOrdersDB.history) do
-        if order.status == Database.STATUS.CLEARED or 
-           order.status == Database.STATUS.CANCELLED then
-            clearedPurged = clearedPurged + 1
-            purgeCount = purgeCount + 1
-        else
-            table.insert(remainingHistory, order)
-        end
-    end
-    
-    -- If we still need to purge more, remove oldest fulfilled orders
-    if purgeCount < needToPurge and #remainingHistory > 0 then
-        -- Sort remaining history by completion time (oldest first)
-        table.sort(remainingHistory, function(a, b)
-            local timeA = a.fulfilledAt or a.completedAt or 0
-            local timeB = b.fulfilledAt or b.completedAt or 0
-            return timeA < timeB
-        end)
-        
-        local finalHistory = {}
-        local toKeep = #remainingHistory - (needToPurge - purgeCount)
-        
-        for i = 1, #remainingHistory do
-            if i > (needToPurge - purgeCount) then
-                table.insert(finalHistory, remainingHistory[i])
-            else
-                purgeCount = purgeCount + 1
-            end
-        end
-        
-        remainingHistory = finalHistory
-    end
-    
-    -- Update history with remaining orders
-    GuildWorkOrdersDB.history = remainingHistory
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Emergency purge: removed %d cleared/cancelled/expired + %d oldest fulfilled orders (database limit: %d)", 
-            clearedPurged, purgeCount - clearedPurged, Database.LIMITS.MAX_TOTAL_ORDERS))
-    end
-    
-    return purgeCount
-end
+-- REMOVED: PurgeNonActiveOrders - using CleanupOldOrders instead
 
 -- REMOVED: FIFO display limit function - no order count limits
 
@@ -1086,65 +840,20 @@ function Database.ClearSingleOrder(orderID, clearedBy)
     
     local orderFound = false
     
-    -- Find and remove the order from both active orders and history
-    -- Always show debug for troubleshooting
-    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Looking for order ID: %s", orderID))
-    
-    -- Check active orders first
-    local count = 0
-    for id, order in pairs(GuildWorkOrdersDB.orders or {}) do
-        count = count + 1
-        if count <= 3 then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found active order ID: %s (item: %s)", id, order.itemName or "Unknown"))
-        end
-    end
-    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Total active orders: %d", count))
-    
-    -- Check history
-    local historyCount = 0
-    for i, order in ipairs(GuildWorkOrdersDB.history or {}) do
-        historyCount = historyCount + 1
-        if historyCount <= 3 then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Found history order ID: %s (item: %s)", order.id or "Unknown", order.itemName or "Unknown"))
-        end
-    end
-    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Total history orders: %d", historyCount))
-    
-    -- Try to find in active orders first
+    -- Find the order in single database
     local order = GuildWorkOrdersDB.orders[orderID]
     if order then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing active order %s (%s) by admin %s", 
-            orderID, order.itemName or "Unknown", clearedBy or "Unknown"))
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing order %s (%s) by admin %s", 
+                orderID, order.itemName or "Unknown", clearedBy or "Unknown"))
+        end
         
-        -- Mark as cleared instead of deleting
+        -- Mark as cleared (order stays in database)
         order.status = Database.STATUS.CLEARED
         order.clearedAt = GetCurrentTime()
         order.clearedBy = clearedBy or "Admin"
         order.version = (order.version or 1) + 1
-        
-        -- Move to history and remove from active orders
-        Database.MoveToHistory(order)
-        GuildWorkOrdersDB.orders[orderID] = nil
         orderFound = true
-    else
-        -- Try to find in history
-        if GuildWorkOrdersDB.history then
-            for i = #GuildWorkOrdersDB.history, 1, -1 do
-                local historyOrder = GuildWorkOrdersDB.history[i]
-                if historyOrder and tostring(historyOrder.id) == tostring(orderID) then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Clearing history order %s (%s) by admin %s", 
-                        orderID, historyOrder.itemName or "Unknown", clearedBy or "Unknown"))
-                    
-                    -- Mark as cleared instead of deleting
-                    historyOrder.status = Database.STATUS.CLEARED
-                    historyOrder.clearedAt = GetCurrentTime()
-                    historyOrder.clearedBy = clearedBy or "Admin"
-                    historyOrder.version = (historyOrder.version or 1) + 1
-                    orderFound = true
-                    break
-                end
-            end
-        end
     end
     
     if orderFound then

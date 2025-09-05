@@ -1046,7 +1046,7 @@ function UI.UpdateStatusBar()
     end
     
     -- Update order counts - simple total display only
-    local totalCount = Database.GetTotalOrderCount()  -- Total orders including history
+    local totalCount = Database.GetTotalOrderCount()  -- Total orders in database
     local totalText = string.format("Total Orders: %d", totalCount)
     
     UI.countText:SetText(totalText)

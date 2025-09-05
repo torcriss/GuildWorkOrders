@@ -10,7 +10,7 @@ local defaultConfig = {
     announceFormat = "simple",     -- "simple" or "detailed"
     autoSync = true,              -- Auto-sync on login
     syncTimeout = 30,             -- Sync timeout in seconds
-    maxHistory = 200,             -- Max orders to keep in history
+    -- REMOVED: maxHistory - using single database
     orderExpiry = 60,             -- 1 minute in seconds (TESTING)
     debugMode = false,            -- Debug output
     soundAlert = true,            -- Play sound on new orders
@@ -41,7 +41,6 @@ function Config.Load()
         GuildWorkOrdersDB = {
             config = {},
             orders = {},
-            history = {},
             syncData = {
                 lastSync = 0,
                 onlineUsers = {}
@@ -101,9 +100,7 @@ function Config.UpdateDatabase()
         GuildWorkOrdersDB.orders = {}
     end
     
-    if not GuildWorkOrdersDB.history then
-        GuildWorkOrdersDB.history = {}
-    end
+    -- REMOVED: history initialization - using single database
     
     if not GuildWorkOrdersDB.syncData then
         GuildWorkOrdersDB.syncData = {

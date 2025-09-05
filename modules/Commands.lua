@@ -355,7 +355,7 @@ function Commands.ShowStats()
     print(string.format("  - WTB Orders: %d", stats.wtbOrders))
     print(string.format("  - WTS Orders: %d", stats.wtsOrders))
     print(string.format("  - My Orders: %d", stats.myActiveOrders))
-    print(string.format("  History: %d orders", stats.totalHistory))
+    print(string.format("  Total Orders: %d", stats.totalOrders))
     
     -- Online user count removed
     
@@ -367,23 +367,7 @@ function Commands.ShowStats()
     end
 end
 
--- Clear history
-function Commands.ClearHistory()
-    StaticPopupDialogs["GWO_CLEAR_HISTORY_CMD"] = {
-        text = "Clear all order history?",
-        button1 = "Yes",
-        button2 = "No",
-        OnAccept = function()
-            Database.ClearHistory()
-            print("|cff00ff00[GuildWorkOrders]|r Order history cleared")
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-    }
-    
-    StaticPopup_Show("GWO_CLEAR_HISTORY_CMD")
-end
+-- REMOVED: ClearHistory - using single database
 
 -- Configuration commands
 function Commands.HandleConfig(args)
