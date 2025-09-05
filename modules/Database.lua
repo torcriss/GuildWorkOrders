@@ -699,7 +699,10 @@ function Database.GetTotalOrderCount()
     
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for _, order in pairs(GuildWorkOrdersDB.orders) do
-            totalCount = totalCount + 1
+            -- Exclude PURGED orders from total count
+            if order.status ~= Database.STATUS.PURGED then
+                totalCount = totalCount + 1
+            end
         end
     end
     

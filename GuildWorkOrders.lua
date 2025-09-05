@@ -48,12 +48,20 @@ local function Initialize()
     C_Timer.NewTicker(30, function()
         if addon.Database then
             -- First expire active orders that exceeded TTL
-            addon.Database.CleanupExpiredOrders()
+            local expiredCount = addon.Database.CleanupExpiredOrders()
             -- Then purge old non-active orders (PURGED state and deletion)
-            addon.Database.CleanupOldOrders()
+            local purgedCount = addon.Database.CleanupOldOrders()
+            
+            -- Refresh UI if any orders were cleaned up and UI is visible
+            if (expiredCount > 0 or purgedCount > 0) and addon.UI and addon.UI.IsShown and addon.UI.IsShown() then
+                addon.UI.RefreshOrders()
+                if addon.Config and addon.Config.IsDebugMode() then
+                    print("|cffAAAAFF[GWO Debug]|r UI refreshed after cleanup")
+                end
+            end
             
             if addon.Config and addon.Config.IsDebugMode() then
-                print("|cffAAAAFF[GWO Debug]|r Periodic cleanup cycle completed")
+                print(string.format("|cffAAAAFF[GWO Debug]|r Periodic cleanup cycle completed (expired: %d, purged: %d)", expiredCount or 0, purgedCount or 0))
             end
         end
     end)
