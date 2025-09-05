@@ -715,6 +715,21 @@ function Sync.HandleHeartbeat(parts, sender)
                     fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil,
                     clearedBy = clearedBy ~= "" and clearedBy or nil
                 }
+                
+                -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
+                -- Handle both with and without realm suffix in sender name
+                local baseSenderName = strsplit("-", sender)
+                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
+                local hasFulfilledBy = (orderData.fulfilledBy and orderData.fulfilledBy ~= "")
+                local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
+                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
+                
+                if isCreator or hasFulfilledBy or hasClearedBy or isCancelled then
+                    Sync.ProcessHeartbeatOrder(orderData, sender)
+                elseif Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
+                        sender, orderData.player))
+                end
             elseif #orderParts >= 13 then
                 -- Parse legacy format without clearedBy field
                 local timeAgo = tonumber(orderParts[7]) or 0
