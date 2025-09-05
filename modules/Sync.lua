@@ -576,7 +576,7 @@ function Sync.SendHeartbeat()
            (order.status == Database.STATUS.FULFILLED and 
             order.fulfilledAt and currentTime - order.fulfilledAt < 60) or
            (order.status == Database.STATUS.CANCELLED and 
-            order.completedAt and currentTime - order.completedAt < 60) or
+            order.cancelledAt and currentTime - order.cancelledAt < 60) or
            (order.status == Database.STATUS.CLEARED and 
             order.clearedAt and currentTime - order.clearedAt < 60) then
             
