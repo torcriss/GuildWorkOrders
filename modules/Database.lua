@@ -309,8 +309,8 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
         order.fulfilledAt = GetCurrentTime()
     end
     
-    -- Move to history if fulfilled or cancelled
-    if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED then
+    -- Move to history if fulfilled, cancelled, or expired
+    if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED or newStatus == Database.STATUS.EXPIRED then
         Database.MoveToHistory(order)
         GuildWorkOrdersDB.orders[orderID] = nil
     end

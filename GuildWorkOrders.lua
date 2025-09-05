@@ -1,6 +1,6 @@
 -- GuildWorkOrders Addon for WoW Classic Era (Interface 11507)
 -- Guild-wide work order management system with hidden synchronization
--- Version 2.6.2
+-- Version 2.6.3
 
 local addonName, addon = ...
 addon = addon or {}
@@ -9,7 +9,7 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "2.6.2"
+addon.version = "2.6.3"
 addon.build = "Smart Order Purge System & UI Cleanup"
 
 -- Core initialization
