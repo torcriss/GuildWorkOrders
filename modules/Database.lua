@@ -339,6 +339,11 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
         order.fulfilledAt = GetCurrentTime()
     end
     
+    -- Track cancellation timestamp
+    if newStatus == Database.STATUS.CANCELLED then
+        order.cancelledAt = GetCurrentTime()
+    end
+    
     -- Move to history if fulfilled, cancelled, or expired
     if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED then
         Database.MoveToHistory(order)
