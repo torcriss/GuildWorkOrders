@@ -16,7 +16,8 @@ Database.STATUS = {
     ACTIVE = "active",
     PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response (DEPRECATED)
     FULFILLED = "fulfilled",   -- Successfully completed
-    CANCELLED = "cancelled",   -- Cancelled by user or auto-expired
+    CANCELLED = "cancelled",   -- Cancelled by user
+    EXPIRED = "expired",       -- Automatically expired due to time
     CLEARED = "cleared",       -- Admin cleared (synced for 24 hours)
     FAILED = "failed"          -- Fulfillment attempted but failed
 }
@@ -27,10 +28,7 @@ Database.TYPE = {
     WTS = "WTS"
 }
 
--- Database limit constants
-Database.LIMITS = {
-    MAX_DISPLAY_ORDERS = 50
-}
+-- Database limit constants removed - no limits on order count
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
@@ -40,7 +38,43 @@ Database.PURGE_TIMES = {
 
 function Database.Initialize()
     Config = addon.Config
+    
+    -- Migrate existing history to single database
+    Database.MigrateHistoryToSingleDatabase()
+    
     Database.CleanupExpiredOrders()
+end
+
+-- Migrate existing history data to single orders database
+function Database.MigrateHistoryToSingleDatabase()
+    if not GuildWorkOrdersDB then
+        return
+    end
+    
+    -- Ensure orders database exists
+    if not GuildWorkOrdersDB.orders then
+        GuildWorkOrdersDB.orders = {}
+    end
+    
+    -- Migrate history orders if they exist
+    if GuildWorkOrdersDB.history then
+        local migratedCount = 0
+        
+        for _, historyOrder in ipairs(GuildWorkOrdersDB.history) do
+            -- Only migrate if order doesn't already exist in main database
+            if not GuildWorkOrdersDB.orders[historyOrder.id] then
+                GuildWorkOrdersDB.orders[historyOrder.id] = historyOrder
+                migratedCount = migratedCount + 1
+            end
+        end
+        
+        if Config.IsDebugMode() and migratedCount > 0 then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Migrated %d orders from history to single database", migratedCount))
+        end
+        
+        -- Clear old history database
+        GuildWorkOrdersDB.history = nil
+    end
 end
 
 -- Generate unique order ID
@@ -55,8 +89,8 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     local playerName = UnitName("player")
     local realm = GetRealmName()
     
-    -- Implement FIFO: if we have 50+ orders, remove the oldest
-    Database.EnforceDisplayLimit()
+    -- Cleanup old completed orders before creating new one
+    Database.CleanupOldOrders()
     
     -- Parse item name from link
     local itemName = itemLink
@@ -147,7 +181,7 @@ function Database.CleanItemName(order)
     end
 end
 
--- Get all orders
+-- Get all active orders from single database
 function Database.GetAllOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
         return {}
@@ -155,13 +189,8 @@ function Database.GetAllOrders()
     
     local orders = {}
     for id, order in pairs(GuildWorkOrdersDB.orders) do
-        -- Only include active orders that haven't expired, defensive filtering for any stray completed orders
-        if (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) and 
-           order.expiresAt > GetCurrentTime() and
-           order.status ~= Database.STATUS.FULFILLED and
-           order.status ~= Database.STATUS.CANCELLED and
-           order.status ~= Database.STATUS.CLEARED and
-           order.status ~= Database.STATUS.FAILED then
+        -- Only include active orders (single source of truth)
+        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(orders, order)
@@ -199,11 +228,9 @@ function Database.GetMyOrders()
         return {}
     end
     
-    -- Get only my active and pending orders from the active database
+    -- Get all my orders from single database (active and completed)
     for id, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.player == playerName and 
-           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) and
-           order.expiresAt > GetCurrentTime() then
+        if order.player == playerName then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(myOrders, order)
@@ -261,39 +288,45 @@ function Database.GetOrdersToHeartbeat()
     local playerName = UnitName("player")
     local ordersToShare = {}
     
-    -- Get active/pending orders I created + ANY fulfilled/cleared orders (for relay)
+    -- Get all relevant orders from single database
+    local currentTime = GetCurrentTime()
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for _, order in pairs(GuildWorkOrdersDB.orders) do
-            if order.player == playerName or -- Orders I created
-               order.fulfilledBy == playerName or -- Orders I fulfilled  
+            local shouldShare = false
+            
+            -- Share orders I created (active or recently completed)
+            if order.player == playerName then
+                if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+                    shouldShare = true
+                else
+                    -- Share recently completed orders (within 1 minute)
+                    local timeSinceCompleted = nil
+                    if order.fulfilledAt then
+                        timeSinceCompleted = currentTime - order.fulfilledAt
+                    elseif order.cancelledAt then
+                        timeSinceCompleted = currentTime - order.cancelledAt
+                    elseif order.expiredAt then
+                        timeSinceCompleted = currentTime - order.expiredAt
+                    elseif order.clearedAt then
+                        timeSinceCompleted = currentTime - order.clearedAt
+                    end
+                    
+                    if timeSinceCompleted and timeSinceCompleted < 60 then
+                        shouldShare = true
+                    end
+                end
+            end
+            
+            -- Share orders I fulfilled or ANY completed orders for relay
+            if order.fulfilledBy == playerName or -- Orders I fulfilled
                order.fulfilledBy or -- ANY fulfilled orders (relay mode)
-               order.clearedBy then -- ANY cleared orders (relay mode)
-                table.insert(ordersToShare, order)
-            end
-        end
-    end
-    
-    -- Get recently completed orders (created by me, fulfilled by me, OR any completed for relay)
-    local currentTime = GetCurrentTime()
-    local history = Database.GetHistory()
-    for _, order in ipairs(history) do
-        if order.player == playerName or -- Orders I created
-           order.fulfilledBy == playerName or -- Orders I fulfilled
-           (order.fulfilledBy and order.status == Database.STATUS.FULFILLED) or -- ANY fulfilled orders (relay mode)
-           (order.clearedBy and order.status == Database.STATUS.CLEARED) or -- ANY cleared orders (relay mode)
-           (order.status == Database.STATUS.CANCELLED) then -- ANY cancelled orders (relay mode)
-            
-            -- Only include recently completed orders (within 1 minute)
-            local timeSinceCompleted = nil
-            if order.completedAt then
-                timeSinceCompleted = currentTime - order.completedAt
-            elseif order.fulfilledAt then
-                timeSinceCompleted = currentTime - order.fulfilledAt
-            elseif order.expiredAt then
-                timeSinceCompleted = currentTime - order.expiredAt
+               order.clearedBy or -- ANY cleared orders (relay mode) 
+               order.status == Database.STATUS.CANCELLED or -- ANY cancelled orders (relay mode)
+               order.status == Database.STATUS.EXPIRED then -- ANY expired orders (relay mode)
+                shouldShare = true
             end
             
-            if timeSinceCompleted and timeSinceCompleted < 60 then -- 1 minute
+            if shouldShare then
                 table.insert(ordersToShare, order)
             end
         end
@@ -339,16 +372,14 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
         order.fulfilledAt = GetCurrentTime()
     end
     
-    -- Track cancellation timestamp
+    -- Track completion timestamps
     if newStatus == Database.STATUS.CANCELLED then
         order.cancelledAt = GetCurrentTime()
+    elseif newStatus == Database.STATUS.EXPIRED then
+        order.expiredAt = GetCurrentTime()
     end
     
-    -- Move to history if fulfilled, cancelled, or expired
-    if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED then
-        Database.MoveToHistory(order)
-        GuildWorkOrdersDB.orders[orderID] = nil
-    end
+    -- Orders stay in single database - no moving to history needed
     
     if Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order status changed: %s -> %s%s",
@@ -522,61 +553,11 @@ function Database.SyncOrder(orderData)
     return true
 end
 
--- Move order to history
-function Database.MoveToHistory(order)
-    if not GuildWorkOrdersDB.history then
-        GuildWorkOrdersDB.history = {}
-    end
-    
-    -- Check if order already exists in history
-    for i, existingOrder in ipairs(GuildWorkOrdersDB.history) do
-        if existingOrder.id == order.id then
-            -- Preserve existing completion date if already set
-            if existingOrder.completedAt and not order.completedAt then
-                order.completedAt = existingOrder.completedAt
-            end
-            -- Update existing entry instead of adding duplicate
-            GuildWorkOrdersDB.history[i] = order
-            return
-        end
-    end
-    
-    -- Add completion timestamp only if not already set
-    if not order.completedAt then
-        order.completedAt = GetCurrentTime()
-    end
-    
-    table.insert(GuildWorkOrdersDB.history, 1, order)
-    
-    -- Maintain history limit
-    local maxHistory = Config.Get("maxHistory") or 100
-    while #GuildWorkOrdersDB.history > maxHistory do
-        table.remove(GuildWorkOrdersDB.history)
-    end
-end
+-- REMOVED: MoveToHistory - orders stay in single database
 
--- Get order history
-function Database.GetHistory()
-    local history = GuildWorkOrdersDB.history or {}
-    
-    -- Clean up any corrupted item names in history
-    for _, order in ipairs(history) do
-        Database.CleanItemName(order)
-    end
-    
-    return history
-end
+-- REMOVED: GetHistory - using single database
 
--- Find order in history by ID
-function Database.FindInHistory(orderID)
-    local history = GuildWorkOrdersDB.history or {}
-    for _, order in ipairs(history) do
-        if order.id == orderID then
-            return order
-        end
-    end
-    return nil
-end
+-- REMOVED: FindInHistory - using single database
 
 -- Get all orders unified (active + history)
 function Database.GetAllOrdersUnified()
@@ -608,10 +589,7 @@ function Database.GetAllOrdersUnified()
 end
 
 -- Clear history
-function Database.ClearHistory()
-    GuildWorkOrdersDB.history = {}
-    return true
-end
+-- REMOVED: ClearHistory - using single database
 
 -- Broadcast cancellation of all orders to all users (admin function)
 function Database.BroadcastClearAll(callback)
@@ -709,6 +687,48 @@ function Database.ResetDatabase()
     return true
 end
 
+-- Cleanup old completed orders based on their specific timestamps
+function Database.CleanupOldOrders()
+    if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
+        return 0
+    end
+    
+    local currentTime = GetCurrentTime()
+    local removedCount = 0
+    local ordersToRemove = {}
+    
+    for orderID, order in pairs(GuildWorkOrdersDB.orders) do
+        local shouldRemove = false
+        
+        -- Check each status type with its specific timestamp
+        if order.status == Database.STATUS.CANCELLED and order.cancelledAt then
+            shouldRemove = (currentTime - order.cancelledAt) > 120  -- 2 minutes
+        elseif order.status == Database.STATUS.CLEARED and order.clearedAt then
+            shouldRemove = (currentTime - order.clearedAt) > 120  -- 2 minutes
+        elseif order.status == Database.STATUS.EXPIRED and order.expiredAt then
+            shouldRemove = (currentTime - order.expiredAt) > 120  -- 2 minutes
+        elseif order.status == Database.STATUS.FULFILLED and order.fulfilledAt then
+            shouldRemove = (currentTime - order.fulfilledAt) > 240  -- 4 minutes
+        end
+        
+        if shouldRemove then
+            table.insert(ordersToRemove, orderID)
+        end
+    end
+    
+    -- Remove the orders
+    for _, orderID in ipairs(ordersToRemove) do
+        GuildWorkOrdersDB.orders[orderID] = nil
+        removedCount = removedCount + 1
+    end
+    
+    if Config.IsDebugMode() and removedCount > 0 then
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d old completed orders", removedCount))
+    end
+    
+    return removedCount
+end
+
 -- Auto-expire orders after 30 minutes (mark as EXPIRED, not FULFILLED) 
 function Database.CleanupExpiredOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
@@ -733,7 +753,7 @@ function Database.CleanupExpiredOrders()
                     end
                     
                     -- Use UpdateOrderStatus to properly handle the expiry
-                    Database.UpdateOrderStatus(orderID, Database.STATUS.CANCELLED)
+                    Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
                     
                     -- Add expiry timestamp (after status update since order might be moved)
                     -- Find the order in history to add expiredAt timestamp
@@ -991,56 +1011,7 @@ function Database.PurgeNonActiveOrders(targetCount)
     return purgeCount
 end
 
--- Enforce FIFO display limit (keep only 50 most recent orders)
-function Database.EnforceDisplayLimit()
-    local allOrders = {}
-    
-    -- Collect all orders (active + history) with timestamps
-    if GuildWorkOrdersDB.orders then
-        for _, order in pairs(GuildWorkOrdersDB.orders) do
-            table.insert(allOrders, {order = order, timestamp = order.timestamp or 0, location = "active"})
-        end
-    end
-    
-    if GuildWorkOrdersDB.history then
-        for _, order in ipairs(GuildWorkOrdersDB.history) do
-            local timestamp = order.timestamp or order.completedAt or order.fulfilledAt or 0
-            table.insert(allOrders, {order = order, timestamp = timestamp, location = "history"})
-        end
-    end
-    
-    -- If we have 50 or fewer orders, no action needed
-    if #allOrders <= Database.LIMITS.MAX_DISPLAY_ORDERS then
-        return
-    end
-    
-    -- Sort by timestamp (oldest first)
-    table.sort(allOrders, function(a, b) 
-        return a.timestamp < b.timestamp 
-    end)
-    
-    -- Remove oldest orders until we have exactly 50
-    local toRemove = #allOrders - Database.LIMITS.MAX_DISPLAY_ORDERS
-    for i = 1, toRemove do
-        local orderData = allOrders[i]
-        if orderData.location == "active" then
-            -- Remove from active orders
-            if GuildWorkOrdersDB.orders then
-                GuildWorkOrdersDB.orders[orderData.order.id] = nil
-            end
-        else
-            -- Remove from history
-            if GuildWorkOrdersDB.history then
-                for j, historyOrder in ipairs(GuildWorkOrdersDB.history) do
-                    if historyOrder.id == orderData.order.id then
-                        table.remove(GuildWorkOrdersDB.history, j)
-                        break
-                    end
-                end
-            end
-        end
-    end
-end
+-- REMOVED: FIFO display limit function - no order count limits
 
 -- Helper function to parse price string to copper
 function Database.ParsePriceToCopper(priceStr)
@@ -1073,11 +1044,23 @@ end
 -- Get statistics
 function Database.GetStats()
     local activeOrders = Database.GetAllOrders()
-    local history = Database.GetHistory()
+    local allOrders = 0
+    local completedOrders = 0
+    
+    -- Count all orders from single database
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+        for _, order in pairs(GuildWorkOrdersDB.orders) do
+            allOrders = allOrders + 1
+            if order.status ~= Database.STATUS.ACTIVE and order.status ~= Database.STATUS.PENDING then
+                completedOrders = completedOrders + 1
+            end
+        end
+    end
     
     local stats = {
         activeOrders = #activeOrders,
-        totalHistory = #history,
+        totalOrders = allOrders,
+        completedOrders = completedOrders,
         myActiveOrders = #Database.GetMyOrders(),
         wtbOrders = #Database.GetOrdersByType(Database.TYPE.WTB),
         wtsOrders = #Database.GetOrdersByType(Database.TYPE.WTS)
