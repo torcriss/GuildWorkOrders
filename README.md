@@ -9,13 +9,12 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 - 🎯 **Smart Parsing** - Automatically detects WTB/WTS messages from guild chat
 - 📱 **Enhanced UI** - Tabbed interface with type column and improved order management
 - ⚡ **Real-time Updates** - Orders update instantly across all users with heartbeat system
-- 🛡️ **Advanced Sync Protocol** - Robust message validation and conflict resolution
+- 🛡️ **Six-State Lifecycle** - Robust order management with proper state transitions
 - 🔐 **Admin Clear System** - Password-protected guild-wide order clearing with full tracking
-- ⏰ **Auto-Expiry** - Orders automatically expire after 30 minutes
+- ⏰ **1-Minute Order Lifecycle** - Orders automatically expire after 1 minute for rapid turnover
 - 📢 **Optional Announcements** - Can announce new orders to guild chat if desired
-- 🏷️ **Database Limits** - Smart order limits (200 total, 10 per user) with automatic cleanup
-- 🔧 **Message Size Optimization** - Efficient encoding prevents sync failures with any item type
-- 📊 **Status Indicators** - Real-time display of your orders, database usage, and admin actions
+- 🔧 **Automatic Cleanup** - Smart cleanup system prevents database bloat
+- 📊 **Status Indicators** - Real-time display of your orders and database usage
 
 ## Installation
 
@@ -47,7 +46,7 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 ### Management Commands
 ```
 /gwo cancel 1                          # Cancel your order #1
-/gwo fulfill 2                         # Mark your order #2 as fulfilled
+/gwo fulfill 2                         # Mark your order #2 as completed
 /gwo sync                              # Force sync with guild
 /gwo help                              # Show all commands
 ```
@@ -78,14 +77,29 @@ Access the password-protected admin clear system:
 
 ## How It Works
 
+### Six-State Order Lifecycle
+GuildWorkOrders uses a sophisticated 6-state system for order management:
+
+1. **ACTIVE** - Newly created orders, visible to all players
+2. **EXPIRED** - Orders that exceeded the 1-minute time limit
+3. **CANCELLED** - Orders manually cancelled by the player
+4. **COMPLETED** - Orders marked as fulfilled by the player  
+5. **CLEARED** - Orders removed by admin action
+6. **PURGED** - Internal cleanup state before permanent deletion
+
+**State Transitions:**
+- Active orders automatically expire after 1 minute
+- Non-active orders (expired/cancelled/completed/cleared) transition to PURGED after 2 minutes
+- PURGED orders are deleted after broadcasting for 4 minutes total
+- All state changes sync instantly across all guild members
+
 ### Synchronization
 - Orders are synchronized between guild members using hidden addon messages
 - No guild chat spam - all communication is invisible to non-addon users
-- **Heartbeat System** - 30-second periodic broadcasts ensure all users stay synchronized
-- **Auto-Sync** - Automatic synchronization every 60 seconds for enhanced reliability
-- **Advanced Conflict Resolution** - Version-based conflict resolution with timestamps
-- **Extended History Sync** - Completed orders synchronized for 24 hours for better visibility
-- **Message Size Validation** - Prevents sync failures with legendary items and long names  
+- **3-Second Heartbeat System** - Continuous rotating broadcasts ensure all users stay synchronized
+- **Instant New Order Sync** - New orders broadcast immediately to all users
+- **Advanced State Management** - Proper handling of all 6 order states with timestamps
+- **Network Reliability** - Two-stage deletion with PURGED state prevents data loss
 - **Rate Limiting** - Prevents flooding (max 5 messages per second with intelligent batching)
 
 ### Order Parsing
@@ -96,13 +110,12 @@ The addon automatically detects WTB/WTS patterns in guild chat:
 - Only processes messages containing actual items
 
 ### Order Management
-- **Smart Limits** - Maximum 200 total orders, 10 active orders per user
-- **Automatic Cleanup** - Purges old history when database approaches limits
-- **Order Expiration** - Orders expire after 30 minutes automatically
-- **Order Actions** - Players can cancel or mark their own orders as fulfilled
+- **Rapid Turnover** - 1-minute order lifecycle for active trading
+- **Automatic Cleanup** - Time-based cleanup prevents database bloat
+- **Order Actions** - Players can cancel or mark their own orders as completed
 - **Full History** - Complete tracking of completed orders with status details
 - **Advanced Search** - Search and filter functionality with real-time updates
-- **Admin Clear System** - Password-protected global clearing with timestamp tracking
+- **Admin Clear System** - Password-protected clearing with timestamp tracking
 
 ## Configuration
 
@@ -112,7 +125,7 @@ Access configuration via `/gwo config` or through the UI:
 - **autoSync** - Auto-sync on login (default: true)
 - **soundAlert** - Play sound for new orders (default: true)
 - **debugMode** - Enable debug logging (default: false)
-- **orderExpiry** - Order expiry time in seconds (default: 1800 = 30 minutes)
+- **orderExpiry** - Order expiry time in seconds (default: 60 = 1 minute)
 
 ## Requirements
 
@@ -152,7 +165,7 @@ GuildWorkOrders/
 ├── deploy.sh                    # Development deployment script
 └── modules/
     ├── Config.lua               # Configuration management
-    ├── Database.lua             # Order storage with smart limits
+    ├── Database.lua             # Six-state order management system
     ├── Parser.lua               # WTB/WTS message parsing
     ├── Sync.lua                 # Advanced guild synchronization protocol
     ├── UI.lua                   # Enhanced user interface with status indicators
@@ -186,169 +199,44 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v3.1.1** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.0.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v3.1.1)
+## Recent Updates (v4.0.0)
 
-### 🎨 UI Display Improvements
-- **Status Column Display** - Fixed expired orders showing "expired" (lowercase) instead of "Expired" (capitalized) in the Status column
-- **Column Header Simplification** - Changed "Action/Date" column header to "Action" in All Orders tab for cleaner interface
-- **Message Standardization** - All console messages now use consistent `[GWO]` prefix instead of `[GuildWorkOrders]` for brevity
+### 🚀 Six-State Order Lifecycle System
+- **Complete System Overhaul** - Revolutionary 6-state order management system
+- **ACTIVE → EXPIRED/CANCELLED/COMPLETED/CLEARED → PURGED → Deleted** - Proper state transitions
+- **1-Minute Order Lifecycle** - Orders expire after 1 minute for rapid turnover
+- **Two-Stage Deletion** - PURGED state ensures network-wide order removal reliability
+- **Heartbeat-Only Synchronization** - Continuous 3-second rotating broadcasts eliminate sync gaps
 
-### 🔧 Technical Improvements
-- **Status Display Logic** - Added explicit case for `Database.STATUS.EXPIRED` in UI status display logic
-- **Message Consistency** - Standardized color coding across all debug, success, and error messages
-- **Code Cleanup** - Improved maintainability with consistent message formatting throughout
+### ⚡ Enhanced Network Protocol  
+- **19-Field Heartbeat Messages** - Complete order state with all timestamps
+- **Instant State Propagation** - All order changes sync immediately across guild members
+- **Network Reliability** - PURGED orders broadcast for 4 minutes total before deletion
+- **Zero Data Loss** - Robust conflict resolution prevents order desynchronization
+- **Automatic Cleanup** - 30-second periodic cleanup timer maintains system health
 
-## Previous Updates (v3.1.0)
-
-### 🚀 Major System Overhaul
-- **Unified Database Architecture** - Simplified from dual (active/history) to single unified database
-- **Automatic Cleanup System** - Time-based cleanup on order creation instead of timer-based
-  - 2 minutes for cancelled/cleared/expired orders
-  - 4 minutes for fulfilled orders  
-- **No Limits** - Removed FIFO concept and all order count limits
-- **No Backward Compatibility** - Clean slate approach since addon hasn't launched
-
-### ⚡ Enhanced Performance
-- **Streamlined Message System** - Standardized `[GWO]` prefix reduces message length
-- **Simplified Architecture** - Removed hundreds of lines of legacy complexity
-- **Better Resource Usage** - Single database reduces memory overhead and sync complexity
-
-## Previous Updates (v2.5.1)
-
-### 🐛 Bug Fixes & Improvements
-- **Expired Orders Display** - Fixed display of expired orders showing as "Expired" instead of "Cancelled"
-- **Windows Deploy Script** - Updated deployment script for Windows 11 environment compatibility
-- **Deployment Path** - Fixed Windows deployment destination path
-
-## Previous Updates (v2.5.0)
-
-### 🚀 Major Performance & Efficiency Overhaul
-- **30-Minute Order Lifecycle** - Orders now expire after 30 minutes instead of 24 hours for faster turnover
-- **Revolutionary Heartbeat System** - 3-second rotating broadcasts replace 30-second full syncs
-- **Maintained Database** - Database capacity remains at 200 orders with optimized cleanup
-- **92% Network Load Reduction** - From 1,830 to 140 messages per minute for 60 users
-- **Enhanced User Capacity** - Improved support for more concurrent users through optimized sync
-
-### ⚡ Real-Time Optimization
-- **Rotating Order Broadcasts** - Each user shares 1 order every 3 seconds in round-robin fashion
-- **Immediate New Order Sync** - Fresh orders still broadcast instantly to all users
-- **Eliminated Sync Bursts** - No more timeout issues or request flooding
-- **Predictable Network Pattern** - Clean, consistent heartbeat system
-
-### 🎨 Enhanced Visual Feedback
-- **Color-Coded Time Display** - Intuitive remaining time visualization:
-  - 🟢 Green: 20-30min remaining (fresh orders)
-  - 🟡 Yellow: 10-19min remaining (halfway point)  
-  - 🟠 Orange: 5-9min remaining (warning)
-  - 🔴 Red: 0-4min remaining (critical)
-- **Streamlined Interface** - Removed redundant Refresh button for cleaner UI
-- **Auto-Config Migration** - Seamlessly updates saved expiry settings
+### 🎨 Improved User Experience
+- **Real-Time Status Updates** - Orders update instantly in UI across all users
+- **Hidden PURGED Orders** - Clean UI experience while maintaining network reliability
+- **Status Consistency** - All users see identical order states and timing
+- **Enhanced Debug System** - Comprehensive logging for troubleshooting network issues
 
 ### 🛠️ Technical Improvements
-- **Full Sync Disabled** - Heartbeat-only system eliminates complexity
-- **Enhanced Debug Messages** - Better troubleshooting and monitoring
-- **Improved Performance** - Cleaner code with reduced overhead
-- **Breaking Changes Handled** - Smooth upgrade path with automatic migrations
+- **Single Database Architecture** - Simplified from dual database to unified order storage
+- **Timestamp-Based State Management** - Precise order lifecycle tracking with multiple timestamps
+- **Legacy Compatibility Removed** - Clean implementation without backward compatibility overhead
+- **Performance Optimized** - Efficient cleanup cycles and reduced memory footprint
 
-## Previous Updates (v2.4.3)
+### 🐛 Critical Bug Fixes
+- **Fixed Cancelled Orders Not Syncing** - Orders cancelled by one user now immediately sync to all users
+- **Fixed Expired Orders Disappearing** - Expired orders properly display across all guild members
+- **Fixed Heartbeat Reception Issues** - Resolved heartbeats being sent but not received
+- **Fixed Orders Not Purging** - Added missing periodic cleanup timer for proper order lifecycle
+- **Fixed PURGED Orders Never Deleting** - Complete timestamp tracking for reliable deletion
+- **Fixed UI Not Updating** - Added refresh calls after all cleanup cycles
 
-### 🔧 Clear Order Bug Fixes
-- **Fixed Global Clear** - Admin clear all now properly removes both active orders and history for all guild members
-- **Fixed Single Order Clear** - Single order admin clear now works instantly like global clear (was previously delayed)
-- **Improved ID Matching** - Fixed order ID type conversion issues causing single clears to fail
+## Previous Updates
 
-### ⚡ Performance Improvements
-- **Instant UI Updates** - Single order clears now update the UI immediately instead of waiting for sync messages
-- **Consistent Behavior** - Both global and single clears now have the same instant response time
-- **Better User Experience** - No more confusion about whether order clears worked properly
-- **Clear Separation** - Active orders (manageable) vs completed orders (historical) properly separated
-- **Intuitive Interface** - More polished and user-friendly order management
-
-## Previous Updates (v2.4.0)
-
-### ⚡ Sync & Heartbeat Timing Optimizations
-- **Faster Heartbeats** - Reduced from 45 seconds to 30 seconds for quicker order updates
-- **More Frequent Sync** - Auto-sync every 1 minute instead of 3 minutes for better reliability
-- **Extended History** - Completed orders now broadcast for 24 hours instead of 5 minutes
-- **Stable User Tracking** - Maintained 5-minute online user detection for optimal balance
-
-### 🚀 Real-Time Experience Improvements
-- **Immediate Updates** - Orders appear in guild members' UIs within 30 seconds
-- **Better History Visibility** - Completed orders stay synchronized for a full day
-- **Responsive Status Changes** - Order updates propagate much faster between users
-- **Enhanced Trading Awareness** - Better visibility into recent guild trading patterns
-
-### 🎯 Performance Impact
-- **33% faster heartbeat updates** (45s → 30s)
-- **300% more frequent synchronization** (180s → 60s)
-- **28,800% longer order history retention** (5min → 24h)
-- **Maintained stable online detection** (5min buffer)
-
-## Previous Updates (v2.3.0)
-
-### 🔐 Single Order Admin Clear System
-- **Individual Order Clearing** - Admins can now clear specific orders with password protection
-- **Multi-Status Support** - Clear active, pending, and cancelled orders individually
-- **Universal Access** - Admin clear "X" buttons on all tabs (Buy, Sell, My Orders, History)
-- **Two-Step Security** - Password entry + confirmation dialog (same password "0000")
-- **Global Synchronization** - Cleared orders removed instantly across all guild members
-
-### 🎨 Enhanced UI Management
-- **Smart Button Positioning** - Red "X" buttons positioned to avoid column overlaps
-- **Cancelled Order Support** - Clear cancelled orders from My Orders tab
-- **History Tab Access** - Full admin clear functionality in History tab
-- **Improved Layout** - Clean positioning after status text and date columns
-
-### 🛠️ Technical Improvements
-- **CLEAR_SINGLE Protocol** - New message type for individual order management
-- **Dual Database Search** - Looks in both active orders and history for comprehensive clearing
-- **Classic Era Compatibility** - Fixed SetSecurityMode and texture access issues
-- **Self-Message Processing** - Admins process their own clear messages for immediate updates
-
-### 🔧 Bug Fixes
-- **Database Structure** - Fixed hash table vs array lookup for cancelled orders
-- **Order Access** - Resolved cancelled orders being inaccessible for clearing
-- **Error Handling** - Improved stability with missing functions and invalid states
-
-## Previous Updates (v2.2.1)
-
-### 🛠️ Minor Fixes
-- **Fixed Item Field Tooltip** - Removed incorrect "Type item names manually" suggestion
-- **Improved User Experience** - Tooltip now only shows functional item selection methods
-- **UI Polish** - Better guidance for new users on how to select items
-
-## Previous Updates (v2.2.0)
-
-### 🔐 Password-Protected Admin System
-- **Admin Clear Button** - Secure admin clear functionality in UI with password protection
-- **Hashed Password Security** - Password "0000" stored as hash, not visible in code
-- **Two-Step Verification** - Password entry + final confirmation dialog
-- **Failed Attempt Protection** - 30-second lockout after 3 failed attempts
-- **Global Clear Tracking** - Shows "Last clear: X ago by PlayerName" in status bar
-
-### 🛡️ Advanced Sync Protocol
-- **CLEAR_ALL Messages** - New message type for admin clear events
-- **Offline User Protection** - Missed admin clears applied when users return online
-- **Pre-Clear Filtering** - Prevents old orders from repopulating after clears
-- **Clear Timestamp Validation** - All sync handlers check clear events
-
-### 🎨 Enhanced User Interface
-- **Status Bar Improvements** - Last clear indicator with user attribution
-- **Column Header Updates** - "Time"→"Remaining", "Completed (Server)"→"Date"
-- **Admin Button Styling** - Red-tinted button with hover effects and tooltips
-- **Fixed Text Overlap** - Proper spacing for all status bar elements
-- **Password Dialogs** - Masked input fields with security warnings
-
-### 🔧 Security & UX Improvements
-- **Removed Slash Command** - `/gwo clear` removed for better security
-- **Progressive Warnings** - Multiple confirmation steps for admin actions
-- **Real-Time Updates** - Status changes visible immediately across all users
-- **Rate-Limited Broadcasting** - 5 messages/second for admin clear events
-
-### ⚡ Technical Optimizations
-- **Memory-Efficient Hashing** - Custom djb2 algorithm implementation  
-- **Enhanced Conflict Resolution** - Robust handling of clear event timing
-- **Minimap Button Fixes** - Improved toggle functionality and positioning
-- **Debug Output Reduction** - Cleaner console output for better UX
+See git history for complete changelog of previous versions.
