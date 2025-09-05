@@ -306,7 +306,7 @@ function UI.CreateColumnHeaders()
             {text = "Seller", width = 70, x = 460},
             {text = "Remaining", width = 50, x = 545},
             {text = "Status", width = 70, x = 610},
-            {text = "Action/Date", width = 100, x = 695}
+            {text = "Action", width = 100, x = 695}
         }
     else
         headers = {
@@ -532,6 +532,8 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cff888888Cleared|r")
         elseif order.status == Database.STATUS.FAILED then
             statusText:SetText("|cffff8080Failed|r")
+        elseif order.status == Database.STATUS.EXPIRED then
+            statusText:SetText("|cffffff00Expired|r")
         else
             statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
         end
@@ -703,10 +705,10 @@ function UI.CreateOrderRow(order, index)
                         -- Complete the pending fulfillment
                         local success = Database.CompleteFulfillment(order.id)
                         if success then
-                            print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! %s fulfilled your order.", order.pendingFulfiller))
+                            print(string.format("|cff00FF00[GWO]|r Order fulfilled by %s!", order.pendingFulfiller))
                             UI.RefreshOrders()
                         else
-                            print("|cffff0000[GuildWorkOrders]|r Failed to complete order")
+                            print("|cffFF6B6B[GWO]|r Failed to complete order")
                         end
                     else
                         -- Cancel order
@@ -1066,7 +1068,7 @@ function UI.ConfirmCancelOrder(order)
                 Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
             end
             UI.RefreshOrders()
-            print("|cff00ff00[GuildWorkOrders]|r Order cancelled")
+            print("|cff00FF00[GWO]|r Order cancelled")
         end,
         timeout = 0,
         whileDead = true,
@@ -1087,7 +1089,7 @@ function UI.WhisperPlayer(order)
     )
     
     SendChatMessage(message, "WHISPER", nil, order.player)
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Whispered %s about %s",
+    print(string.format("|cff00ff00[GWO]|r Whispered %s about %s",
         order.player, order.itemName))
 end
 
@@ -1173,7 +1175,7 @@ function UI.CreateNewOrderDialog()
                 self:SetText(itemName)
                 self.itemLink = itemLink
                 ClearCursor() -- Clear the dragged item from cursor
-                print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+                print("|cff00ff00[GWO]|r Selected item: " .. itemName)
             elseif string.find(itemLink, "Hitem:") then
                 -- Handle corrupted item links
                 local itemId = string.match(itemLink, "Hitem:(%d+)")
@@ -1182,7 +1184,7 @@ function UI.CreateNewOrderDialog()
                     self:SetText(fallbackName)
                     self.itemLink = itemLink
                     ClearCursor()
-                    print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. fallbackName .. " (corrupted drag link)")
+                    print("|cff00ff00[GWO]|r Selected item: " .. fallbackName .. " (corrupted drag link)")
                 end
             end
         end
@@ -1199,7 +1201,7 @@ function UI.CreateNewOrderDialog()
                     self:SetText(itemName)
                     self.itemLink = itemLink
                     ClearCursor()
-                    print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+                    print("|cff00ff00[GWO]|r Selected item: " .. itemName)
                 elseif string.find(itemLink, "Hitem:") then
                     -- Handle corrupted item links
                     local itemId = string.match(itemLink, "Hitem:(%d+)")
@@ -1208,7 +1210,7 @@ function UI.CreateNewOrderDialog()
                         self:SetText(fallbackName)
                         self.itemLink = itemLink
                         ClearCursor()
-                        print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. fallbackName .. " (corrupted mouseup link)")
+                        print("|cff00ff00[GWO]|r Selected item: " .. fallbackName .. " (corrupted mouseup link)")
                     end
                 end
             end
@@ -1291,7 +1293,7 @@ function UI.CreateNewOrderDialog()
                 if itemName and UI.newOrderDialog.itemInput then
                     UI.newOrderDialog.itemInput:SetText(itemName)
                     UI.newOrderDialog.itemInput.itemLink = text
-                    print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. itemName)
+                    print("|cff00ff00[GWO]|r Selected item: " .. itemName)
                     return true
                 elseif text and string.find(text, "Hitem:") then
                     -- Handle corrupted item links without brackets
@@ -1300,7 +1302,7 @@ function UI.CreateNewOrderDialog()
                         local fallbackName = "Item " .. itemId
                         UI.newOrderDialog.itemInput:SetText(fallbackName)
                         UI.newOrderDialog.itemInput.itemLink = text
-                        print("|cff00ff00[GuildWorkOrders]|r Selected item: " .. fallbackName .. " (corrupted link)")
+                        print("|cff00ff00[GWO]|r Selected item: " .. fallbackName .. " (corrupted link)")
                         return true
                     end
                 end
@@ -1335,14 +1337,14 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
     
     -- Validate that an item was selected
     if not itemLink then
-        print("|cffff0000[GuildWorkOrders]|r Please select an item by shift-clicking or dragging it to the item field")
+        print("|cffFF6B6B[GWO]|r Please shift-click an item to select it")
         return
     end
     
     -- Validate input
     local isValid, errors = Parser.ValidateOrderData(orderType, itemLink, quantity, price)
     if not isValid then
-        print("|cffff0000[GuildWorkOrders]|r " .. table.concat(errors, ", "))
+        print("|cffff0000[GWO]|r " .. table.concat(errors, ", "))
         return
     end
     
@@ -1377,7 +1379,7 @@ function UI.CreateOrderFromDialog(dialog, buyRadio, itemInput, qtyInput, priceIn
         UI.RefreshOrders()
         UI.UpdateStatusBar()  -- Update counter after creating order
         
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Created %s order for %s", orderType, order.itemName or "Unknown Item"))
+        print(string.format("|cff00FF00[GWO]|r Created %s order: %s", orderType, order.itemName or "Unknown Item"))
     end
 end
 
@@ -1422,11 +1424,11 @@ function UI.ConfirmCancelOrder(order)
                 if Sync and Sync.BroadcastOrderUpdate then
                     Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
                 end
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
+                print(string.format("|cff00ff00[GWO]|r Cancelled order: %s", order.itemName))
                 UI.RefreshOrders()
                 UI.UpdateStatusBar()  -- Update counter after cancelling
             else
-                print("|cffff0000[GuildWorkOrders]|r Failed to cancel order")
+                print("|cffff0000[GWO]|r Failed to cancel order")
             end
         end,
         timeout = 0,
@@ -1457,13 +1459,13 @@ function UI.ConfirmSellToOrder(order)
                 if Sync and Sync.BroadcastOrderUpdate then
                     Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
                 end
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to sell %s to %s.", 
+                print(string.format("|cff00ff00[GWO]|r Order completed! You have agreed to sell %s to %s.", 
                     order.itemName or "item", order.player))
                 
                 -- Refresh UI to show completed state
                 UI.RefreshOrders()
             else
-                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to complete order"))
+                print(string.format("|cffff0000[GWO]|r %s", errorMsg or "Failed to complete order"))
                 
                 -- Refresh UI to show any status changes
                 UI.RefreshOrders()
@@ -1497,13 +1499,13 @@ function UI.ConfirmBuyFromOrder(order)
                 if Sync and Sync.BroadcastOrderUpdate then
                     Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
                 end
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Order completed! You have agreed to buy %s from %s.", 
+                print(string.format("|cff00ff00[GWO]|r Order completed! You have agreed to buy %s from %s.", 
                     order.itemName or "item", order.player))
                 
                 -- Refresh UI to show completed state
                 UI.RefreshOrders()
             else
-                print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg or "Failed to complete order"))
+                print(string.format("|cffff0000[GWO]|r %s", errorMsg or "Failed to complete order"))
                 
                 -- Refresh UI to show any status changes
                 UI.RefreshOrders()
@@ -1689,7 +1691,7 @@ StaticPopupDialogs["GWO_ADMIN_PASSWORD"] = {
             -- Show final confirmation dialog
             StaticPopup_Show("GWO_ADMIN_CONFIRM")
         else
-            print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg))
+            print(string.format("|cffff0000[GWO]|r %s", errorMsg))
             -- Clear the password field
             self.editBox:SetText("")
         end
@@ -1709,11 +1711,11 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
     button2 = "Cancel",
     OnAccept = function()
         if addon.Sync and addon.Sync.BroadcastClearAll then
-            print("|cffFFAA00[GuildWorkOrders]|r Initiating admin clear...")
+            print("|cffFFAA00[GWO]|r Initiating admin clear...")
             addon.Sync.BroadcastClearAll(function()
                 -- After clear all is broadcast, clear local database
                 Database.ClearAllData()
-                print("|cff00ff00[GuildWorkOrders]|r Admin clear completed! All orders cleared globally.")
+                print("|cff00ff00[GWO]|r Admin clear completed! All orders cleared globally.")
                 
                 -- Refresh UI if open
                 if mainFrame and mainFrame:IsShown() then
@@ -1722,7 +1724,7 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
                 end
             end)
         else
-            print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
+            print("|cffff0000[GWO]|r Error: Sync module not available")
         end
     end,
     timeout = 0,
@@ -1757,7 +1759,7 @@ StaticPopupDialogs["GWO_ADMIN_PASSWORD_SINGLE"] = {
             -- Show final confirmation dialog
             StaticPopup_Show("GWO_ADMIN_CONFIRM_SINGLE")
         else
-            print(string.format("|cffff0000[GuildWorkOrders]|r %s", errorMsg))
+            print(string.format("|cffff0000[GWO]|r %s", errorMsg))
             -- Clear the password field
             self.editBox:SetText("")
         end
@@ -1778,12 +1780,12 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM_SINGLE"] = {
     OnAccept = function()
         local order = UI.pendingClearOrder
         if not order or not order.id then
-            print("|cffff0000[GuildWorkOrders]|r Error: No order selected for clearing")
+            print("|cffff0000[GWO]|r Error: No order selected for clearing")
             return
         end
         
         if addon.Sync and addon.Sync.BroadcastClearSingle then
-            print(string.format("|cffFFAA00[GuildWorkOrders]|r Clearing order: %s", order.itemName or "Unknown Item"))
+            print(string.format("|cffFFAA00[GWO]|r Clearing order: %s", order.itemName or "Unknown Item"))
             addon.Sync.BroadcastClearSingle(tostring(order.id), function()
                 -- Clear locally immediately (like clear all does)
                 Database.ClearSingleOrder(tostring(order.id), UnitName("player"))
@@ -1794,10 +1796,10 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM_SINGLE"] = {
                     UI.UpdateStatusBar()
                 end
                 
-                print("|cff00ff00[GuildWorkOrders]|r Order cleared!")
+                print("|cff00ff00[GWO]|r Order cleared!")
             end)
         else
-            print("|cffff0000[GuildWorkOrders]|r Error: Sync module not available")
+            print("|cffff0000[GWO]|r Error: Sync module not available")
         end
         
         -- Clear the pending order reference
