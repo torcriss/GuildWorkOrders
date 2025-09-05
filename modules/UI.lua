@@ -929,25 +929,10 @@ function UI.CreateStatusBar()
     bg:SetAllPoints()
     bg:SetColorTexture(0.1, 0.1, 0.1, 0.5)
     
-    -- Online users indicator
-    local onlineText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    onlineText:SetPoint("LEFT", 5, 0)
-    onlineText:SetText("|cff00ff00• Online: 0|r")
-    UI.onlineText = onlineText
-    
-    -- Make clickable for details
-    local onlineButton = CreateFrame("Button", nil, statusBar)
-    onlineButton:SetPoint("LEFT", 0, 0)
-    onlineButton:SetSize(100, 20)
-    onlineButton:SetScript("OnEnter", function()
-        UI.ShowOnlineTooltip(onlineButton)
-    end)
-    onlineButton:SetScript("OnLeave", GameTooltip_Hide)
-    
-    -- Admin Clear button
+    -- Admin Clear button (moved to leftmost position)
     local adminBtn = CreateFrame("Button", nil, statusBar)
     adminBtn:SetSize(50, 18)
-    adminBtn:SetPoint("LEFT", onlineText, "RIGHT", 15, 0)
+    adminBtn:SetPoint("LEFT", 5, 0)
     
     -- Create text
     local adminText = adminBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -980,9 +965,9 @@ function UI.CreateStatusBar()
     
     UI.adminBtn = adminBtn
     
-    -- Last clear info
+    -- Last clear info (moved to center)
     local clearText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    clearText:SetPoint("RIGHT", -220, 0)
+    clearText:SetPoint("CENTER", 0, 0)
     clearText:SetText("Last clear: Never")
     UI.clearText = clearText
     
@@ -1027,14 +1012,7 @@ end
 
 -- Update status bar
 function UI.UpdateStatusBar()
-    if not UI.onlineText or not Sync then return end
-    
-    -- Update online count
-    local onlineCount = 0
-    if Sync.GetOnlineUserCount then
-        onlineCount = Sync.GetOnlineUserCount()
-    end
-    UI.onlineText:SetText(string.format("|cff00ff00• Online: %d|r", onlineCount + 1))
+    if not Database then return end
     
     -- Update last clear info
     if UI.clearText and Database then
@@ -1058,28 +1036,7 @@ function UI.UpdateStatusBar()
     UI.countText:SetText(totalText)
 end
 
--- Show online users tooltip
-function UI.ShowOnlineTooltip(frame)
-    GameTooltip:SetOwner(frame, "ANCHOR_TOPLEFT")
-    GameTooltip:SetText("GuildWorkOrders Users Online")
-    
-    if Sync and Sync.GetOnlineUsers then
-        local users = Sync.GetOnlineUsers()
-        local count = 0
-        for user, info in pairs(users) do
-            count = count + 1
-        end
-        
-        -- Add 1 to include the current user
-        local totalCount = count + 1
-        
-        GameTooltip:AddLine(string.format("|cff00ff00Total: %d users online|r", totalCount))
-    else
-        GameTooltip:AddLine("|cff888888Sync not initialized|r")
-    end
-    
-    GameTooltip:Show()
-end
+-- Removed - online users functionality no longer needed
 
 -- Confirm cancel order
 function UI.ConfirmCancelOrder(order)

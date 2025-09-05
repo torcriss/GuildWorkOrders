@@ -22,15 +22,8 @@ local MAX_HEARTBEAT_ORDERS = 10  -- Max orders per heartbeat (for performance)
 local MAX_MESSAGE_SIZE = 250      -- WoW addon message size limit (255 - 5 byte safety margin)
 local MAX_ITEMLINK_SIZE = 120     -- Maximum item link length in sync messages (increased due to more efficient escaping)
 
--- Message types
+-- Message types (simplified for heartbeat-only)
 local MSG_TYPE = {
-    NEW_ORDER = "NEW",
-    UPDATE_ORDER = "UPDATE", 
-    DELETE_ORDER = "DELETE",
-    SYNC_REQUEST = "SYNC_REQ",
-    SYNC_INFO = "SYNC_INFO",
-    SYNC_BATCH = "SYNC_BATCH", 
-    SYNC_ACK = "SYNC_ACK",
     PING = "PING",
     PONG = "PONG",
     FULFILL_REQUEST = "FULFILL_REQ",  -- Request to fulfill an order
@@ -110,7 +103,6 @@ end
 -- State tracking
 local messageQueue = {}
 local lastSendTime = 0
-local onlineUsers = {}
 local syncInProgress = false
 local currentSyncSession = nil
 
@@ -121,8 +113,7 @@ function Sync.Initialize()
     -- Register addon message prefix
     C_ChatInfo.RegisterAddonMessagePrefix(ADDON_PREFIX)
     
-    -- Clean up expired online users
-    Sync.CleanupOnlineUsers()
+    -- Online user tracking removed
     
     -- Start heartbeat system
     Sync.StartHeartbeat()
@@ -202,28 +193,10 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
         end
     end
     
-    -- Update online user
-    onlineUsers[sender] = {
-        lastSeen = GetCurrentTime(),
-        version = version
-    }
+    -- Online user tracking removed
     
-    -- Handle message based on type
-    if msgType == MSG_TYPE.NEW_ORDER then
-        Sync.HandleNewOrder(parts, sender)
-    elseif msgType == MSG_TYPE.UPDATE_ORDER then
-        Sync.HandleUpdateOrder(parts, sender)
-    elseif msgType == MSG_TYPE.DELETE_ORDER then
-        Sync.HandleDeleteOrder(parts, sender)
-    elseif msgType == MSG_TYPE.SYNC_REQUEST then
-        Sync.HandleSyncRequest(parts, sender)
-    elseif msgType == MSG_TYPE.SYNC_INFO then
-        Sync.HandleSyncInfo(parts, sender)
-    elseif msgType == MSG_TYPE.SYNC_BATCH then
-        Sync.HandleSyncBatch(parts, sender)
-    elseif msgType == MSG_TYPE.SYNC_ACK then
-        Sync.HandleSyncAck(parts, sender)
-    elseif msgType == MSG_TYPE.PING then
+    -- Handle message based on type (heartbeat-only system)
+    if msgType == MSG_TYPE.PING then
         Sync.HandlePing(parts, sender)
     elseif msgType == MSG_TYPE.PONG then
         Sync.HandlePong(parts, sender)
@@ -303,180 +276,30 @@ function ValidateMessageSize(message)
     return true, nil
 end
 
--- Broadcast new order
+-- New orders are shared via heartbeat only - no immediate broadcast
+-- This function kept for API compatibility but does nothing
 function Sync.BroadcastNewOrder(order)
-    local message = string.format("%s|%d|%s|%s|%s|%s|%d|%s|%d|%d|%d",
-        MSG_TYPE.NEW_ORDER,
-        PROTOCOL_VERSION,
-        order.id,
-        order.type,
-        order.player,
-        EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
-        order.quantity or 0,
-        EscapeDelimiters(order.price or ""),
-        order.timestamp,
-        order.expiresAt,
-        order.version or 1
-    )
-    
-    Sync.QueueMessage(message)
-    
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting new order: %s", order.id))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r New order will be shared via heartbeat: %s", order.id))
     end
 end
 
--- Broadcast order update
+-- Order updates are shared via heartbeat only - no immediate broadcast
+-- This function kept for API compatibility but does nothing
 function Sync.BroadcastOrderUpdate(orderID, status, version, fulfilledBy)
-    local message = string.format("%s|%d|%s|%s|%d|%s",
-        MSG_TYPE.UPDATE_ORDER,
-        PROTOCOL_VERSION,
-        orderID,
-        status,
-        version or 1,
-        fulfilledBy or ""
-    )
-    
-    Sync.QueueMessage(message)
-    
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting order update: %s -> %s%s", 
-            orderID, status, fulfilledBy and (" by " .. fulfilledBy) or ""))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order update will be shared via heartbeat: %s -> %s", 
+            orderID, status))
     end
 end
 
--- Handle new order message
-function Sync.HandleNewOrder(parts, sender)
-    if #parts < 11 then
-        if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Invalid NEW_ORDER message format")
-        end
-        return
-    end
-    
-    local orderData = {
-        id = parts[3],
-        type = parts[4],
-        player = parts[5],
-        itemLink = UnescapeDelimiters(parts[6]),
-        quantity = tonumber(parts[7]),
-        price = UnescapeDelimiters(parts[8]),
-        timestamp = tonumber(parts[9]) or GetCurrentTime(),
-        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 60),
-        version = tonumber(parts[11]) or 1,
-        status = Database.STATUS.ACTIVE
-    }
-    
-    -- Check if this order was created before the last global clear
-    if Database.IsOrderPreClear(orderData.timestamp) then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring pre-clear order: %s (timestamp: %d)", 
-                orderData.id, orderData.timestamp))
-        end
-        return
-    end
-    
-    -- Extract item name from item link for proper display
-    if orderData.itemLink and string.find(orderData.itemLink, "|H") then
-        orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]")
-        if not orderData.itemName then
-            -- If extraction fails, try to get item name from item ID
-            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
-            if itemId then
-                orderData.itemName = "Item " .. itemId
-            else
-                orderData.itemName = "Unknown Item"
-            end
-        end
-    else
-        -- If not a proper item link, try to extract item ID or use as plain text
-        if orderData.itemLink and string.find(orderData.itemLink, "Hitem:") then
-            local itemId = string.match(orderData.itemLink, "Hitem:(%d+)")
-            if itemId then
-                orderData.itemName = "Item " .. itemId
-            else
-                orderData.itemName = "Unknown Item"
-            end
-        else
-            orderData.itemName = orderData.itemLink or "Unknown Item"
-        end
-    end
-    
-    -- Validate order data
-    if not orderData.id or not orderData.type or not orderData.player then
-        if Config.IsDebugMode() then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Invalid order data in NEW_ORDER")
-        end
-        return
-    end
-    
-    -- Parse item name from link
-    if orderData.itemLink then
-        orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]") or orderData.itemLink
-        orderData.priceInCopper = Database.ParsePriceToCopper(orderData.price)
-    end
-    
-    -- Sync to database
-    local success = Database.SyncOrder(orderData)
-    if success and addon.UI and addon.UI.RefreshOrders then
-        addon.UI.RefreshOrders()
-        if addon.UI.UpdateStatusBar then
-            addon.UI.UpdateStatusBar()  -- Update counter when new order synced
-        end
-    end
-end
+-- Removed - orders sync via heartbeat only
 
--- Handle order update message
-function Sync.HandleUpdateOrder(parts, sender)
-    if #parts < 5 then return end
-    
-    local orderID = parts[3]
-    local status = parts[4]
-    local version = tonumber(parts[5]) or 1
-    local fulfilledBy = parts[6] ~= "" and parts[6] or nil
-    
-    -- Find existing order
-    if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderID] then
-        local existingOrder = GuildWorkOrdersDB.orders[orderID]
-        
-        -- Version check
-        if version > (existingOrder.version or 1) then
-            Database.UpdateOrderStatus(orderID, status, fulfilledBy)
-            
-            -- Notify the original order creator if their order was fulfilled by someone else
-            if status == Database.STATUS.FULFILLED and fulfilledBy and existingOrder.player == UnitName("player") then
-                print(string.format("|cff00ff00[GuildWorkOrders]|r Your %s order for %s has been fulfilled by %s! Contact them to arrange the trade.",
-                    existingOrder.type, existingOrder.itemName or "item", fulfilledBy))
-            end
-            
-            if addon.UI and addon.UI.RefreshOrders then
-                addon.UI.RefreshOrders()
-                if addon.UI.UpdateStatusBar then
-                    addon.UI.UpdateStatusBar()  -- Update counter when order status changes
-                end
-            end
-        end
-    end
-end
+-- Removed - order updates sync via heartbeat only
 
--- Handle delete order message
-function Sync.HandleDeleteOrder(parts, sender)
-    if #parts < 3 then return end
-    
-    local orderID = parts[3]
-    
-    if GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderID] then
-        GuildWorkOrdersDB.orders[orderID] = nil
-        if addon.UI and addon.UI.RefreshOrders then
-            addon.UI.RefreshOrders()
-            if addon.UI.UpdateStatusBar then
-                addon.UI.UpdateStatusBar()  -- Update counter when order deleted
-            end
-        end
-    end
-end
+-- Removed - order deletions handled via heartbeat only
 
--- Request sync from other users
+-- Request sync from other users (disabled in heartbeat-only system)
 function Sync.RequestSync()
     -- Full sync disabled - using heartbeat-only system
     if Config.IsDebugMode() then
@@ -484,325 +307,37 @@ function Sync.RequestSync()
     end
 end
 
--- Handle sync request
-function Sync.HandleSyncRequest(parts, sender)
-    local theirLastSync = tonumber(parts[3]) or 0
-    local theirClearTimestamp = tonumber(parts[4]) or 0
-    local myClearTimestamp = Database.GetGlobalClearTimestamp()
-    
-    -- If their clear timestamp is older than mine, send them a clear all message first
-    if theirClearTimestamp < myClearTimestamp then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sending clear event to %s (their: %d, mine: %d)", 
-                sender, theirClearTimestamp, myClearTimestamp))
-        end
-        
-        local _, clearedBy = Database.GetLastClearInfo()
-        local clearMessage = string.format("%s|%d|%d|%s",
-            MSG_TYPE.CLEAR_ALL,
-            PROTOCOL_VERSION,
-            myClearTimestamp,
-            clearedBy or UnitName("player")
-        )
-        Sync.QueueMessage(clearMessage, sender)
-        return
-    end
-    
-    local orders = Database.ExportOrdersForSync()
-    
-    -- Filter orders newer than their last sync
-    local ordersToSend = {}
-    for orderID, order in pairs(orders) do
-        if order.timestamp > theirLastSync then
-            table.insert(ordersToSend, order)
-        end
-    end
-    
-    if #ordersToSend == 0 then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r No new orders to sync to %s", sender))
-        end
-        return
-    end
-    
-    -- Send sync info
-    local batches = math.ceil(#ordersToSend / BATCH_SIZE)
-    local syncID = GetCurrentTime() .. "_" .. math.random(1000, 9999)
-    
-    local infoMessage = string.format("%s|%d|%s|%d|%d",
-        MSG_TYPE.SYNC_INFO,
-        PROTOCOL_VERSION,
-        syncID,
-        batches,
-        #ordersToSend
-    )
-    
-    Sync.QueueMessage(infoMessage, sender)
-    
-    -- Send batches
-    for batchNum = 1, batches do
-        local startIdx = (batchNum - 1) * BATCH_SIZE + 1
-        local endIdx = math.min(batchNum * BATCH_SIZE, #ordersToSend)
-        
-        local batchData = {}
-        local skippedCount = 0
-        
-        for i = startIdx, endIdx do
-            local order = ordersToSend[i]
-            local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d",
-                order.id,
-                order.type,
-                order.player,
-                EscapeDelimiters(TruncateItemLink(order.itemLink) or ""),
-                order.quantity or 0,
-                EscapeDelimiters(order.price or ""),
-                order.timestamp,
-                order.expiresAt,
-                order.version or 1
-            )
-            
-            -- Check if adding this order would make the message too large
-            local testBatch = table.concat(batchData, ";")
-            if testBatch ~= "" then testBatch = testBatch .. ";" end
-            testBatch = testBatch .. orderStr
-            
-            local testMessage = string.format("%s|%d|%s|%d|%d|%s",
-                MSG_TYPE.SYNC_BATCH, PROTOCOL_VERSION, syncID, batchNum, batches, testBatch)
-            
-            local isValid, errorMsg = ValidateMessageSize(testMessage)
-            if isValid then
-                table.insert(batchData, orderStr)
-            else
-                skippedCount = skippedCount + 1
-                if Config.IsDebugMode() then
-                    print(string.format("|cffFFAA00[GuildWorkOrders Debug]|r Skipping oversized order in sync batch: %s (%s)",
-                        order.id, order.itemName or "Unknown Item"))
-                end
-            end
-        end
-        
-        if skippedCount > 0 and not Config.IsDebugMode() then
-            print(string.format("|cffFFAA00[GuildWorkOrders]|r Warning: %d orders skipped in sync due to size limits", skippedCount))
-        end
-        
-        -- Only send batch if it has orders
-        if #batchData > 0 then
-            local batchMessage = string.format("%s|%d|%s|%d|%d|%s",
-                MSG_TYPE.SYNC_BATCH,
-                PROTOCOL_VERSION,
-                syncID,
-                batchNum,
-                batches,
-                table.concat(batchData, ";")
-            )
-            
-            Sync.QueueMessage(batchMessage, sender)
-        end
-    end
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sending %d orders in %d batches to %s",
-            #ordersToSend, batches, sender))
-    end
-end
+-- Removed - full sync disabled in heartbeat-only system
 
--- Handle sync info
-function Sync.HandleSyncInfo(parts, sender)
-    if #parts < 5 then return end
-    
-    local syncID = parts[3]
-    local totalBatches = tonumber(parts[4])
-    local totalOrders = tonumber(parts[5])
-    
-    currentSyncSession = {
-        id = syncID,
-        sender = sender,
-        totalBatches = totalBatches,
-        totalOrders = totalOrders,
-        receivedBatches = {},
-        startTime = GetTime()
-    }
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Starting sync: %d orders in %d batches from %s",
-            totalOrders, totalBatches, sender))
-    end
-end
+-- Removed - full sync disabled in heartbeat-only system
 
--- Handle sync batch
-function Sync.HandleSyncBatch(parts, sender)
-    if #parts < 6 or not currentSyncSession then return end
-    
-    local syncID = parts[3]
-    local batchNum = tonumber(parts[4])
-    local totalBatches = tonumber(parts[5])
-    local batchData = parts[6]
-    
-    -- Verify sync session
-    if syncID ~= currentSyncSession.id or sender ~= currentSyncSession.sender then
-        return
-    end
-    
-    -- Mark batch as received
-    currentSyncSession.receivedBatches[batchNum] = true
-    
-    -- Process orders in batch
-    local orderCount = 0
-    for orderStr in string.gmatch(batchData, "[^;]+") do
-        local orderParts = {strsplit(":", orderStr)}
-        if #orderParts >= 9 then
-            local orderData = {
-                id = orderParts[1],
-                type = orderParts[2],
-                player = orderParts[3],
-                itemLink = UnescapeDelimiters(orderParts[4]),
-                quantity = tonumber(orderParts[5]),
-                price = UnescapeDelimiters(orderParts[6]),
-                timestamp = tonumber(orderParts[7]),
-                expiresAt = tonumber(orderParts[8]),
-                version = tonumber(orderParts[9]) or 1,
-                status = Database.STATUS.ACTIVE
-            }
-            
-            -- Parse item name and price
-            if orderData.itemLink then
-                orderData.itemName = string.match(orderData.itemLink, "%[(.-)%]") or orderData.itemLink
-                orderData.priceInCopper = Database.ParsePriceToCopper(orderData.price)
-            end
-            
-            -- Check if this order was created before the last global clear
-            if not Database.IsOrderPreClear(orderData.timestamp) then
-                Database.SyncOrder(orderData)
-            elseif Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Ignoring pre-clear sync batch order: %s (timestamp: %d)", 
-                    orderData.id, orderData.timestamp))
-            end
-            orderCount = orderCount + 1
-        end
-    end
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Processed batch %d/%d: %d orders",
-            batchNum, totalBatches, orderCount))
-    end
-    
-    -- Check if sync is complete
-    local receivedAll = true
-    for i = 1, totalBatches do
-        if not currentSyncSession.receivedBatches[i] then
-            receivedAll = false
-            break
-        end
-    end
-    
-    if receivedAll then
-        -- Send acknowledgment
-        local ackMessage = string.format("%s|%d|%s|%d",
-            MSG_TYPE.SYNC_ACK,
-            PROTOCOL_VERSION,
-            syncID,
-            currentSyncSession.totalOrders
-        )
-        
-        Sync.QueueMessage(ackMessage, sender)
-        
-        -- Update last sync time
-        GuildWorkOrdersDB.syncData.lastSync = GetCurrentTime()
-        
-        -- Clean up and refresh UI
-        currentSyncSession = nil
-        syncInProgress = false
-        
-        if addon.UI and addon.UI.RefreshOrders then
-            addon.UI.RefreshOrders()
-            if addon.UI.UpdateStatusBar then
-                addon.UI.UpdateStatusBar()  -- Update counter after sync complete
-            end
-        end
-        
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sync complete: received all %d batches",
-                totalBatches))
-        end
-    end
-end
+-- Removed - full sync disabled in heartbeat-only system
 
--- Handle sync acknowledgment
-function Sync.HandleSyncAck(parts, sender)
-    if Config.IsDebugMode() then
-        local ordersReceived = parts[4] or "unknown"
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r %s acknowledged sync: %s orders received",
-            sender, ordersReceived))
-    end
-end
+-- Removed - full sync disabled in heartbeat-only system
 
--- Send ping to discover online users
+-- Ping functionality simplified (kept for compatibility)
 function Sync.SendPing()
-    local message = string.format("%s|%d",
-        MSG_TYPE.PING,
-        PROTOCOL_VERSION
-    )
-    
-    Sync.QueueMessage(message)
-    
+    -- Ping functionality removed - no longer needed
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Sending ping")
+        print("|cff00ff00[GuildWorkOrders Debug]|r Ping functionality disabled")
     end
 end
 
--- Handle ping message
+-- Handle ping message (simplified)
 function Sync.HandlePing(parts, sender)
-    local message = string.format("%s|%d",
-        MSG_TYPE.PONG,
-        PROTOCOL_VERSION
-    )
-    
-    Sync.QueueMessage(message, sender)
+    -- Ping handling removed - no longer needed
 end
 
--- Handle pong message
+-- Handle pong message (simplified)
 function Sync.HandlePong(parts, sender)
-    onlineUsers[sender] = {
-        lastSeen = GetCurrentTime(),
-        version = tonumber(parts[2]) or 1
-    }
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received pong from %s", sender))
-    end
+    -- Pong handling removed - no longer needed
 end
 
--- Clean up offline users
-function Sync.CleanupOnlineUsers()
-    local currentTime = GetCurrentTime()
-    local toRemove = {}
-    
-    for playerName, userData in pairs(onlineUsers) do
-        if currentTime - userData.lastSeen > 300 then  -- 5 minutes
-            table.insert(toRemove, playerName)
-        end
-    end
-    
-    for _, playerName in ipairs(toRemove) do
-        onlineUsers[playerName] = nil
-    end
-end
+-- Removed - online user tracking no longer needed
 
--- Get online user count
-function Sync.GetOnlineUserCount()
-    Sync.CleanupOnlineUsers()
-    local count = 0
-    for _ in pairs(onlineUsers) do
-        count = count + 1
-    end
-    return count
-end
+-- Removed - online user tracking no longer needed
 
--- Get online users list
-function Sync.GetOnlineUsers()
-    Sync.CleanupOnlineUsers()
-    return onlineUsers
-end
+-- Removed - online user tracking no longer needed
 
 -- Get sync status
 function Sync.GetSyncStatus()
@@ -812,8 +347,7 @@ function Sync.GetSyncStatus()
     return {
         lastSync = lastSync,
         timeAgo = timeAgo,
-        inProgress = syncInProgress,
-        onlineUsers = Sync.GetOnlineUserCount()
+        inProgress = syncInProgress
     }
 end
 

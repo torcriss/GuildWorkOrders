@@ -35,15 +35,7 @@ local function Initialize()
         print("|cff00ff00[GuildWorkOrders Debug]|r Full sync disabled - using heartbeat-only system")
     end
     
-    -- Send ping on login to discover online users
-    if addon.Sync and addon.Sync.SendPing then
-        C_Timer.After(5, function()  -- Delay to let guild roster load
-            if addon.Config and addon.Config.IsDebugMode() then
-                print("|cff00ff00[GuildWorkOrders Debug]|r Discovering online guild members...")
-            end
-            addon.Sync.SendPing()
-        end)
-    end
+    -- User discovery removed - orders sync via heartbeat only
     
     -- Status bar refresh timer (every 30 seconds) to keep "time ago" display current
     C_Timer.NewTicker(30, function()
@@ -57,9 +49,7 @@ local function Initialize()
         if addon.Database then
             addon.Database.CleanupExpiredOrders()
         end
-        if addon.Sync and addon.Sync.CleanupOnlineUsers then
-            addon.Sync.CleanupOnlineUsers()
-        end
+        -- Online user cleanup removed
     end)
     
     if addon.Config and addon.Config.IsDebugMode() then
@@ -83,12 +73,7 @@ GWO:SetScript("OnEvent", function(self, event, ...)
         end
         
     elseif event == "GUILD_ROSTER_UPDATE" then
-        -- Guild roster changed, might affect sync
-        if addon.Sync and addon.Sync.SendPing then
-            C_Timer.After(2, function()
-                addon.Sync.SendPing()  -- Discover online users
-            end)
-        end
+        -- Guild roster changed - no action needed in heartbeat-only system
     end
 end)
 
@@ -183,8 +168,10 @@ _G.GuildWorkOrders = {
     
     ForceSync = function()
         if addon.Sync then
-            -- Full sync disabled - only ping to discover users
-            addon.Sync.SendPing()
+            -- Full sync disabled - heartbeat-only system
+            if addon.Config and addon.Config.IsDebugMode() then
+                print("|cff00ff00[GuildWorkOrders Debug]|r Full sync disabled - orders share via heartbeat")
+            end
             return true
         end
         return false

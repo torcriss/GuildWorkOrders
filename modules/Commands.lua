@@ -326,9 +326,8 @@ end
 -- Force sync
 function Commands.ForceSync()
     if Sync then
-        -- Full sync disabled - only ping to discover online users
-        Sync.SendPing()
-        print("|cff00ff00[GuildWorkOrders]|r Discovering online guild members...")
+        -- Full sync disabled - heartbeat-only system
+        print("|cff00ff00[GuildWorkOrders]|r Orders sync automatically via heartbeat every 3 seconds")
     else
         print("|cffff0000[GuildWorkOrders]|r Sync not available")
     end
@@ -358,9 +357,7 @@ function Commands.ShowStats()
     print(string.format("  - My Orders: %d", stats.myActiveOrders))
     print(string.format("  History: %d orders", stats.totalHistory))
     
-    if syncStatus.onlineUsers then
-        print(string.format("  Online Users: %d", syncStatus.onlineUsers))
-    end
+    -- Online user count removed
     
     if syncStatus.lastSync and syncStatus.lastSync > 0 then
         local timeAgo = UI and UI.GetTimeAgo(syncStatus.lastSync) or "?"
