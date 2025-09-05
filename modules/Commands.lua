@@ -312,8 +312,8 @@ function Commands.FulfillOrder(orderNum)
     local success = Database.FulfillOrder(order.id)
     
     if success then
-        Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
-        print(string.format("|cff00ff00[GWO]|r Fulfilled order: %s", order.itemName))
+        Sync.BroadcastOrderUpdate(order.id, Database.STATUS.COMPLETED, (order.version or 1) + 1)
+        print(string.format("|cff00ff00[GWO]|r Completed order: %s", order.itemName))
         
         if UI then
             UI.RefreshOrders()

@@ -38,21 +38,17 @@ local MSG_TYPE = {
 local STATUS_CODES = {
     encode = {
         ["active"] = "a",
-        ["pending"] = "p", 
-        ["fulfilled"] = "f",
+        ["completed"] = "f",
         ["cancelled"] = "c",
         ["expired"] = "e",
-        ["cleared"] = "x",
-        ["failed"] = "F"
+        ["cleared"] = "x"
     },
     decode = {
         ["a"] = "active",
-        ["p"] = "pending",
-        ["f"] = "fulfilled", 
+        ["f"] = "completed", 
         ["c"] = "cancelled",
         ["e"] = "expired",
-        ["x"] = "cleared",
-        ["F"] = "failed"
+        ["x"] = "cleared"
     }
 }
 
@@ -286,7 +282,7 @@ end
 
 -- Order updates are shared via heartbeat only - no immediate broadcast
 -- This function kept for API compatibility but does nothing
-function Sync.BroadcastOrderUpdate(orderID, status, version, fulfilledBy)
+function Sync.BroadcastOrderUpdate(orderID, status, version, completedBy)
     if Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order update will be shared via heartbeat: %s -> %s", 
             orderID, status))
@@ -569,20 +565,8 @@ function Sync.SendHeartbeat()
     local currentTime = GetCurrentTime()
     local ordersToSend = {}
     
-    for _, order in ipairs(myOrders) do
-        -- Include active, pending orders and recently completed (30 minute window)
-        if order.status == Database.STATUS.ACTIVE or 
-           order.status == Database.STATUS.PENDING or
-           (order.status == Database.STATUS.FULFILLED and 
-            order.fulfilledAt and currentTime - order.fulfilledAt < 60) or
-           (order.status == Database.STATUS.CANCELLED and 
-            order.cancelledAt and currentTime - order.cancelledAt < 60) or
-           (order.status == Database.STATUS.CLEARED and 
-            order.clearedAt and currentTime - order.clearedAt < 60) then
-            
-            table.insert(ordersToSend, order)
-        end
-    end
+    -- Send ALL orders until they are purged - no time filtering
+    ordersToSend = myOrders
     
     if #ordersToSend == 0 then
         if Config.IsDebugMode() then
@@ -591,7 +575,7 @@ function Sync.SendHeartbeat()
         return -- No relevant orders to broadcast
     end
     
-    -- Sort orders by priority: ACTIVE first, then PENDING, then completed
+    -- Sort orders by priority: ACTIVE first, then non-active
     table.sort(ordersToSend, function(a, b)
         -- Active orders have highest priority
         if a.status == Database.STATUS.ACTIVE and b.status ~= Database.STATUS.ACTIVE then
@@ -614,8 +598,7 @@ function Sync.SendHeartbeat()
     
     local orderToSend = ordersToSend[heartbeatIndex]
     if Config.IsDebugMode() then
-        local statusDesc = orderToSend.status == Database.STATUS.ACTIVE and "active" or 
-                          orderToSend.status == Database.STATUS.PENDING and "pending" or "completed"
+        local statusDesc = orderToSend.status == Database.STATUS.ACTIVE and "active" or "non-active"
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Sharing order %d of %d: %s (%s)", 
             heartbeatIndex, #ordersToSend, orderToSend.itemName or "Unknown Item", statusDesc))
     end
@@ -644,7 +627,7 @@ function Sync.SendHeartbeat()
         encodedStatus,
         EscapeDelimiters(order.pendingFulfiller or ""),
         order.pendingTimestamp or 0,
-        EscapeDelimiters(order.fulfilledBy or ""),
+        EscapeDelimiters(order.completedBy or ""),
         EscapeDelimiters(order.clearedBy or "")
     )
     
@@ -692,7 +675,7 @@ function Sync.HandleHeartbeat(parts, sender)
                 local timeAgo = tonumber(orderParts[7]) or 0
                 local ttl = tonumber(orderParts[8]) or 60
                 local encodedStatus = orderParts[10]
-                local fulfilledBy = UnescapeDelimiters(orderParts[13])
+                local completedBy = UnescapeDelimiters(orderParts[13])
                 local clearedBy = UnescapeDelimiters(orderParts[14])
                 
                 -- Restore absolute timestamps
@@ -712,7 +695,7 @@ function Sync.HandleHeartbeat(parts, sender)
                     status = DecodeStatus(encodedStatus),
                     pendingFulfiller = UnescapeDelimiters(orderParts[11]),
                     pendingTimestamp = tonumber(orderParts[12]) or 0,
-                    fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil,
+                    completedBy = completedBy ~= "" and completedBy or nil,
                     clearedBy = clearedBy ~= "" and clearedBy or nil
                 }
                 
@@ -720,11 +703,11 @@ function Sync.HandleHeartbeat(parts, sender)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
                 local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local hasFulfilledBy = (orderData.fulfilledBy and orderData.fulfilledBy ~= "")
+                local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
                 local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
                 local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
                 
-                if isCreator or hasFulfilledBy or hasClearedBy or isCancelled then
+                if isCreator or hasCompletedBy or hasClearedBy or isCancelled then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
@@ -735,7 +718,7 @@ function Sync.HandleHeartbeat(parts, sender)
                 local timeAgo = tonumber(orderParts[7]) or 0
                 local ttl = tonumber(orderParts[8]) or 60
                 local encodedStatus = orderParts[10]
-                local fulfilledBy = UnescapeDelimiters(orderParts[13])
+                local completedBy = UnescapeDelimiters(orderParts[13])
                 
                 -- Restore absolute timestamps
                 local currentTime = GetCurrentTime()
@@ -761,11 +744,11 @@ function Sync.HandleHeartbeat(parts, sender)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
                 local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local hasFulfilledBy = (orderData.fulfilledBy and orderData.fulfilledBy ~= "")
+                local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
                 local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
                 local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
                 
-                if isCreator or hasFulfilledBy or hasClearedBy or isCancelled then
+                if isCreator or hasCompletedBy or hasClearedBy or isCancelled then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
@@ -852,11 +835,11 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         return
     end
     
-    -- Additional protection: Don't allow fulfilled orders to be overwritten by active ones
+    -- Additional protection: Don't allow completed orders to be overwritten by active ones
     local existingOrder = GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id]
-    if existingOrder and existingOrder.fulfilledBy and not orderData.fulfilledBy then
+    if existingOrder and existingOrder.completedBy and not orderData.completedBy then
         if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting heartbeat: trying to overwrite fulfilled order %s with active status", 
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting heartbeat: trying to overwrite completed order %s with active status", 
                 orderData.id))
         end
         return

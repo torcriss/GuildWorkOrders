@@ -459,24 +459,24 @@ function UI.CreateOrderRow(order, index)
         playerName = string.sub(playerName, 1, 8) .. "..."
     end
     
-    local fulfilledByName = order.fulfilledBy or ""
-    if string.len(fulfilledByName) > 10 then
-        fulfilledByName = string.sub(fulfilledByName, 1, 8) .. "..."
+    local completedByName = order.completedBy or ""
+    if string.len(completedByName) > 10 then
+        completedByName = string.sub(completedByName, 1, 8) .. "..."
     end
     
     if order.type == Database.TYPE.WTB then
         -- WTB order: original player is the buyer, fulfilledBy is the seller
         buyer:SetText("|cff00ff00" .. playerName .. "|r")
-        if order.fulfilledBy and order.fulfilledBy ~= "" then
-            seller:SetText("|cff00ff00" .. fulfilledByName .. "|r")
+        if order.completedBy and order.completedBy ~= "" then
+            seller:SetText("|cff00ff00" .. completedByName .. "|r")
         else
             seller:SetText("|cff888888-|r")
         end
     else
         -- WTS order: original player is the seller, fulfilledBy is the buyer
         seller:SetText("|cff00ff00" .. playerName .. "|r")
-        if order.fulfilledBy and order.fulfilledBy ~= "" then
-            buyer:SetText("|cff00ff00" .. fulfilledByName .. "|r")
+        if order.completedBy and order.completedBy ~= "" then
+            buyer:SetText("|cff00ff00" .. completedByName .. "|r")
         else
             buyer:SetText("|cff888888-|r")
         end
@@ -500,7 +500,7 @@ function UI.CreateOrderRow(order, index)
         else
             timeText:SetText("|cff888888-|r")  -- Safety fallback
         end
-    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED then
+    elseif order.status == Database.STATUS.COMPLETED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED then
         -- Show "-" for completed orders to avoid timestamp fluctuations
         timeText:SetText("|cff888888-|r")
     else
@@ -524,7 +524,7 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cff00ccffActive|r")
         elseif order.status == Database.STATUS.PENDING then
             statusText:SetText("|cffFFD700Pending|r")
-        elseif order.status == Database.STATUS.FULFILLED then
+        elseif order.status == Database.STATUS.COMPLETED then
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
@@ -627,7 +627,7 @@ function UI.CreateOrderRow(order, index)
         local playerName = UnitName("player")
         
         -- Handle My Orders tab differently - show status for completed orders
-        if currentTab == "my" and (order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED) then
+        if currentTab == "my" and (order.status == Database.STATUS.COMPLETED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED) then
             -- Show status instead of action button for completed orders
             local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             statusText:SetPoint("LEFT", 610, 0)
@@ -635,7 +635,7 @@ function UI.CreateOrderRow(order, index)
             statusText:SetJustifyH("LEFT")
             if order.status == Database.STATUS.ACTIVE then
                 statusText:SetText("|cff00ccffPending|r")
-            elseif order.status == Database.STATUS.FULFILLED then
+            elseif order.status == Database.STATUS.COMPLETED then
                 statusText:SetText("|cff00ff00Completed|r")
             elseif order.status == Database.STATUS.CANCELLED then
                 statusText:SetText("|cffff8080Cancelled|r")
@@ -705,7 +705,7 @@ function UI.CreateOrderRow(order, index)
                         -- Complete the pending fulfillment
                         local success = Database.CompleteFulfillment(order.id)
                         if success then
-                            print(string.format("|cff00FF00[GWO]|r Order fulfilled by %s!", order.pendingFulfiller))
+                            print(string.format("|cff00FF00[GWO]|r Order completed by %s!", order.pendingFulfiller))
                             UI.RefreshOrders()
                         else
                             print("|cffFF6B6B[GWO]|r Failed to complete order")
@@ -1457,7 +1457,7 @@ function UI.ConfirmSellToOrder(order)
             local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
                 if Sync and Sync.BroadcastOrderUpdate then
-                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
+                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.COMPLETED, (order.version or 1) + 1, playerName)
                 end
                 print(string.format("|cff00ff00[GWO]|r Order completed! You have agreed to sell %s to %s.", 
                     order.itemName or "item", order.player))
@@ -1497,7 +1497,7 @@ function UI.ConfirmBuyFromOrder(order)
             local success, errorMsg = Database.DirectFulfillOrder(order.id, playerName)
             if success then
                 if Sync and Sync.BroadcastOrderUpdate then
-                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1, playerName)
+                    Sync.BroadcastOrderUpdate(order.id, Database.STATUS.COMPLETED, (order.version or 1) + 1, playerName)
                 end
                 print(string.format("|cff00ff00[GWO]|r Order completed! You have agreed to buy %s from %s.", 
                     order.itemName or "item", order.player))
@@ -1657,7 +1657,7 @@ function UI.UpdateOrderRowButton(row, order)
         row.actionButton:SetText("Pending...")
         row.actionButton:SetEnabled(false)
         row.actionButton:Show()
-    elseif order.status == Database.STATUS.FULFILLED then
+    elseif order.status == Database.STATUS.COMPLETED then
         row.actionButton:SetText("Completed")
         row.actionButton:SetEnabled(false)
         row.actionButton:Show()

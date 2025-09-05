@@ -14,12 +14,10 @@ end
 -- Order status constants
 Database.STATUS = {
     ACTIVE = "active",
-    PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response (DEPRECATED)
-    FULFILLED = "fulfilled",   -- Successfully completed
+    COMPLETED = "completed",   -- Successfully completed
     CANCELLED = "cancelled",   -- Cancelled by user
     EXPIRED = "expired",       -- Automatically expired due to time
-    CLEARED = "cleared",       -- Admin cleared (synced for 24 hours)
-    FAILED = "failed"          -- Fulfillment attempted but failed
+    CLEARED = "cleared"        -- Admin cleared
 }
 
 -- Order type constants
@@ -32,8 +30,7 @@ Database.TYPE = {
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
-    CLEARED_CANCELLED_EXPIRED = 120,    -- 2 minutes for testing (was 6 minutes)
-    FULFILLED = 86400                    -- 24 hours for fulfilled orders
+    NON_ACTIVE = 120    -- 2 minutes for all non-active orders (cancelled, expired, cleared, completed)
 }
 
 function Database.Initialize()
@@ -211,7 +208,7 @@ end
 
 -- REMOVED: GetMyCreatedOrders - using GetOrdersToHeartbeat instead
 
--- Get orders to broadcast via heartbeat (created by me, fulfilled by me, OR any fulfilled order for relay)
+-- Get orders to broadcast via heartbeat (created by me, completed by me, OR any completed order for relay)
 function Database.GetOrdersToHeartbeat()
     local playerName = UnitName("player")
     local ordersToShare = {}
@@ -222,32 +219,14 @@ function Database.GetOrdersToHeartbeat()
         for _, order in pairs(GuildWorkOrdersDB.orders) do
             local shouldShare = false
             
-            -- Share orders I created (active or recently completed)
+            -- Share ALL orders I created until purged
             if order.player == playerName then
-                if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
-                    shouldShare = true
-                else
-                    -- Share recently completed orders (within 1 minute)
-                    local timeSinceCompleted = nil
-                    if order.fulfilledAt then
-                        timeSinceCompleted = currentTime - order.fulfilledAt
-                    elseif order.cancelledAt then
-                        timeSinceCompleted = currentTime - order.cancelledAt
-                    elseif order.expiredAt then
-                        timeSinceCompleted = currentTime - order.expiredAt
-                    elseif order.clearedAt then
-                        timeSinceCompleted = currentTime - order.clearedAt
-                    end
-                    
-                    if timeSinceCompleted and timeSinceCompleted < 60 then
-                        shouldShare = true
-                    end
-                end
+                shouldShare = true
             end
             
-            -- Share orders I fulfilled or ANY completed orders for relay
-            if order.fulfilledBy == playerName or -- Orders I fulfilled
-               order.fulfilledBy or -- ANY fulfilled orders (relay mode)
+            -- Share orders I completed or ANY non-active orders for relay
+            if order.completedBy == playerName or -- Orders I completed
+               order.completedBy or -- ANY completed orders (relay mode)
                order.clearedBy or -- ANY cleared orders (relay mode) 
                order.status == Database.STATUS.CANCELLED or -- ANY cancelled orders (relay mode)
                order.status == Database.STATUS.EXPIRED then -- ANY expired orders (relay mode)
@@ -284,7 +263,7 @@ function Database.SearchOrders(searchText)
 end
 
 -- Update order status
-function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
+function Database.UpdateOrderStatus(orderID, newStatus, completedBy)
     if not GuildWorkOrdersDB.orders or not GuildWorkOrdersDB.orders[orderID] then
         return false
     end
@@ -294,10 +273,10 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     order.status = newStatus
     order.version = (order.version or 1) + 1
     
-    -- Track who fulfilled the order
-    if newStatus == Database.STATUS.FULFILLED and fulfilledBy then
-        order.fulfilledBy = fulfilledBy
-        order.fulfilledAt = GetCurrentTime()
+    -- Track who completed the order
+    if newStatus == Database.STATUS.COMPLETED and completedBy then
+        order.completedBy = completedBy
+        order.completedAt = GetCurrentTime()
     end
     
     -- Track completion timestamps
@@ -311,7 +290,7 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     
     if Config.IsDebugMode() then
         print(string.format("|cffAAAAFF[GWO Debug]|r Order status: %s -> %s%s",
-            oldStatus, newStatus, fulfilledBy and (" by " .. fulfilledBy) or ""))
+            oldStatus, newStatus, completedBy and (" by " .. completedBy) or ""))
     end
     
     return true
@@ -353,7 +332,7 @@ function Database.CompleteFulfillment(orderID)
     end
     
     -- Complete the fulfillment
-    return Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, order.pendingFulfiller)
+    return Database.UpdateOrderStatus(orderID, Database.STATUS.COMPLETED, order.pendingFulfiller)
 end
 
 -- Request to fulfill order (sends request to creator) - DEPRECATED
@@ -382,7 +361,7 @@ function Database.DirectFulfillOrder(orderID, fulfillerName)
     
     -- Check if order is still active
     if order.status ~= Database.STATUS.ACTIVE then
-        if order.status == Database.STATUS.FULFILLED then
+        if order.status == Database.STATUS.COMPLETED then
             return false, "Order already completed"
         elseif order.status == Database.STATUS.CANCELLED then
             return false, "Order was cancelled"
@@ -399,7 +378,7 @@ function Database.DirectFulfillOrder(orderID, fulfillerName)
     end
     
     -- Fulfill the order directly
-    local success = Database.UpdateOrderStatus(orderID, Database.STATUS.FULFILLED, fulfillerName)
+    local success = Database.UpdateOrderStatus(orderID, Database.STATUS.COMPLETED, fulfillerName)
     if success then
         if Config.IsDebugMode() then
             print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order completed by %s", 
@@ -439,9 +418,9 @@ function Database.SyncOrder(orderData)
         end
     end
     
-    -- Preserve fulfilledBy if it exists locally but not in incoming data
-    if existingOrder and existingOrder.fulfilledBy and not orderData.fulfilledBy then
-        orderData.fulfilledBy = existingOrder.fulfilledBy
+    -- Preserve completedBy if it exists locally but not in incoming data
+    if existingOrder and existingOrder.completedBy and not orderData.completedBy then
+        orderData.completedBy = existingOrder.completedBy
     end
     
     -- All orders stay in single database regardless of status
@@ -595,15 +574,15 @@ function Database.CleanupOldOrders()
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
         local shouldRemove = false
         
-        -- Check each status type with its specific timestamp
+        -- Check all non-active orders with 2-minute purge time
         if order.status == Database.STATUS.CANCELLED and order.cancelledAt then
-            shouldRemove = (currentTime - order.cancelledAt) > 120  -- 2 minutes
+            shouldRemove = (currentTime - order.cancelledAt) > Database.PURGE_TIMES.NON_ACTIVE
         elseif order.status == Database.STATUS.CLEARED and order.clearedAt then
-            shouldRemove = (currentTime - order.clearedAt) > 120  -- 2 minutes
+            shouldRemove = (currentTime - order.clearedAt) > Database.PURGE_TIMES.NON_ACTIVE
         elseif order.status == Database.STATUS.EXPIRED and order.expiredAt then
-            shouldRemove = (currentTime - order.expiredAt) > 120  -- 2 minutes
-        elseif order.status == Database.STATUS.FULFILLED and order.fulfilledAt then
-            shouldRemove = (currentTime - order.fulfilledAt) > 240  -- 4 minutes
+            shouldRemove = (currentTime - order.expiredAt) > Database.PURGE_TIMES.NON_ACTIVE
+        elseif order.status == Database.STATUS.COMPLETED and order.completedAt then
+            shouldRemove = (currentTime - order.completedAt) > Database.PURGE_TIMES.NON_ACTIVE
         end
         
         if shouldRemove then
@@ -624,7 +603,7 @@ function Database.CleanupOldOrders()
     return removedCount
 end
 
--- Auto-expire orders after 30 minutes (mark as EXPIRED, not FULFILLED) 
+-- Auto-expire orders after 1 minute (mark as EXPIRED, not COMPLETED) 
 function Database.CleanupExpiredOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
         return 0
@@ -655,9 +634,9 @@ function Database.CleanupExpiredOrders()
                     
                     expiredCount = expiredCount + 1
                     
-                    -- Broadcast the expiration (not fulfillment)
+                    -- Broadcast the expiration
                     if addon.Sync then
-                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.CANCELLED, order.version or 1)
+                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.EXPIRED, order.version or 1)
                     end
                     
                     -- Notify me that my order expired
@@ -667,9 +646,8 @@ function Database.CleanupExpiredOrders()
                         order.type, order.itemName or "item", timeText))
                         
                 else
-                    -- Not my order - just remove from my local view
-                    -- The creator will broadcast the expiration via heartbeat
-                    table.insert(toRemove, orderID)
+                    -- Not my order - let heartbeat system handle the expiration update
+                    -- Don't delete locally, rely on sync from creator
                 end
             end
         end
