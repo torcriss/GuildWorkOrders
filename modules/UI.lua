@@ -518,20 +518,18 @@ function UI.CreateOrderRow(order, index)
         
         -- Check if order is expired first (overrides status)
         if order.expiresAt and order.expiresAt < GetCurrentTime() and 
-           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
+           order.status == Database.STATUS.ACTIVE then
             statusText:SetText("|cffffff00Expired|r")
         elseif order.status == Database.STATUS.ACTIVE then
             statusText:SetText("|cff00ccffActive|r")
-        elseif order.status == Database.STATUS.PENDING then
-            statusText:SetText("|cffFFD700Pending|r")
+        -- PENDING status removed from system
         elseif order.status == Database.STATUS.COMPLETED then
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
         elseif order.status == Database.STATUS.CLEARED then
             statusText:SetText("|cff888888Cleared|r")
-        elseif order.status == Database.STATUS.FAILED then
-            statusText:SetText("|cffff8080Failed|r")
+        -- FAILED status removed from system
         elseif order.status == Database.STATUS.EXPIRED then
             statusText:SetText("|cffffff00Expired|r")
         else
@@ -641,8 +639,7 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cffff8080Cancelled|r")
             elseif order.status == Database.STATUS.CLEARED then
                 statusText:SetText("|cff888888Cleared|r")
-            elseif order.status == Database.STATUS.FAILED then
-                statusText:SetText("|cffff8080Failed|r")
+            -- FAILED status removed from system
             else
                 statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
             end
@@ -701,7 +698,7 @@ function UI.CreateOrderRow(order, index)
             actionBtn:SetScript("OnClick", function()
                 if order.player == playerName then
                     -- Own order
-                    if order.status == Database.STATUS.PENDING and order.pendingFulfiller then
+                    if false then -- PENDING status removed from system
                         -- Complete the pending fulfillment
                         local success = Database.CompleteFulfillment(order.id)
                         if success then
@@ -875,7 +872,7 @@ function UI.RefreshOrders()
     local hasExpiredOrders = false
     for _, order in ipairs(orders) do
         if order.expiresAt and order.expiresAt < GetCurrentTime() and 
-           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
+           order.status == Database.STATUS.ACTIVE then
             hasExpiredOrders = true
             break
         end
@@ -1603,17 +1600,11 @@ function UI.UpdateOrderRowButton(row, order)
     
     -- Check if this is my own order
     if order.player == playerName then
-        if order.status == Database.STATUS.PENDING and order.pendingFulfiller then
-            -- My order has a pending fulfillment - show complete button
-            row.actionButton:SetText("Complete")
-            row.actionButton:SetEnabled(true)
-            row.actionButton:Show()
-        else
-            -- My order - show cancel/status
-            row.actionButton:SetText("Cancel")
-            row.actionButton:SetEnabled(true) 
-            row.actionButton:Show()
-        end
+        -- PENDING status was removed from system - simplified to just cancel button
+        -- My order - show cancel/status
+        row.actionButton:SetText("Cancel")
+        row.actionButton:SetEnabled(true) 
+        row.actionButton:Show()
         return
     end
     
@@ -1653,10 +1644,7 @@ function UI.UpdateOrderRowButton(row, order)
             end
             row.actionButton:Show()
         end
-    elseif order.status == Database.STATUS.PENDING then
-        row.actionButton:SetText("Pending...")
-        row.actionButton:SetEnabled(false)
-        row.actionButton:Show()
+    -- PENDING status removed from system
     elseif order.status == Database.STATUS.COMPLETED then
         row.actionButton:SetText("Completed")
         row.actionButton:SetEnabled(false)

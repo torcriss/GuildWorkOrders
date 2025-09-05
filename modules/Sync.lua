@@ -41,14 +41,16 @@ local STATUS_CODES = {
         ["completed"] = "f",
         ["cancelled"] = "c",
         ["expired"] = "e",
-        ["cleared"] = "x"
+        ["cleared"] = "x",
+        ["purged"] = "g"
     },
     decode = {
         ["a"] = "active",
         ["f"] = "completed", 
         ["c"] = "cancelled",
         ["e"] = "expired",
-        ["x"] = "cleared"
+        ["x"] = "cleared",
+        ["g"] = "purged"
     }
 }
 

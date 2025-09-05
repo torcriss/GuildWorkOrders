@@ -17,7 +17,8 @@ Database.STATUS = {
     COMPLETED = "completed",   -- Successfully completed
     CANCELLED = "cancelled",   -- Cancelled by user
     EXPIRED = "expired",       -- Automatically expired due to time
-    CLEARED = "cleared"        -- Admin cleared
+    CLEARED = "cleared",       -- Admin cleared
+    PURGED = "purged"          -- Marked for deletion, broadcasting for sync
 }
 
 -- Order type constants
@@ -30,7 +31,8 @@ Database.TYPE = {
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
-    NON_ACTIVE = 120    -- 2 minutes for all non-active orders (cancelled, expired, cleared, completed)
+    NON_ACTIVE = 120,       -- 2 minutes for all non-active orders (cancelled, expired, cleared, completed)
+    PURGE_BROADCAST = 240   -- 4 minutes broadcast time for PURGED orders (2x purge time)
 }
 
 function Database.Initialize()
@@ -151,7 +153,7 @@ function Database.GetAllOrders()
     local orders = {}
     for id, order in pairs(GuildWorkOrdersDB.orders) do
         -- Only include active orders (single source of truth)
-        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+        if order.status == Database.STATUS.ACTIVE then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(orders, order)
@@ -189,9 +191,9 @@ function Database.GetMyOrders()
         return {}
     end
     
-    -- Get all my orders from single database (active and completed)
+    -- Get all my orders from single database (active and completed, exclude PURGED)
     for id, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.player == playerName then
+        if order.player == playerName and order.status ~= Database.STATUS.PURGED then
             -- Clean up any corrupted item names
             Database.CleanItemName(order)
             table.insert(myOrders, order)
@@ -447,9 +449,12 @@ function Database.GetAllOrdersUnified()
     -- Get all active orders (without filtering by status)
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for id, order in pairs(GuildWorkOrdersDB.orders) do
-            -- Clean up any corrupted item names
-            Database.CleanItemName(order)
-            table.insert(allOrders, order)
+            -- Exclude PURGED orders from UI
+            if order.status ~= Database.STATUS.PURGED then
+                -- Clean up any corrupted item names
+                Database.CleanItemName(order)
+                table.insert(allOrders, order)
+            end
         end
     end
     
@@ -572,26 +577,45 @@ function Database.CleanupOldOrders()
     local ordersToRemove = {}
     
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
-        local shouldRemove = false
+        local shouldTransitionToPurged = false
+        local shouldDelete = false
         
-        -- Check all non-active orders with 2-minute purge time
+        -- Check if non-active orders should transition to PURGED (after 2 minutes)
         if order.status == Database.STATUS.CANCELLED and order.cancelledAt then
-            shouldRemove = (currentTime - order.cancelledAt) > Database.PURGE_TIMES.NON_ACTIVE
+            shouldTransitionToPurged = (currentTime - order.cancelledAt) > Database.PURGE_TIMES.NON_ACTIVE
         elseif order.status == Database.STATUS.CLEARED and order.clearedAt then
-            shouldRemove = (currentTime - order.clearedAt) > Database.PURGE_TIMES.NON_ACTIVE
+            shouldTransitionToPurged = (currentTime - order.clearedAt) > Database.PURGE_TIMES.NON_ACTIVE
         elseif order.status == Database.STATUS.EXPIRED and order.expiredAt then
-            shouldRemove = (currentTime - order.expiredAt) > Database.PURGE_TIMES.NON_ACTIVE
+            shouldTransitionToPurged = (currentTime - order.expiredAt) > Database.PURGE_TIMES.NON_ACTIVE
         elseif order.status == Database.STATUS.COMPLETED and order.completedAt then
-            shouldRemove = (currentTime - order.completedAt) > Database.PURGE_TIMES.NON_ACTIVE
+            shouldTransitionToPurged = (currentTime - order.completedAt) > Database.PURGE_TIMES.NON_ACTIVE
+        elseif order.status == Database.STATUS.PURGED and order.purgedAt then
+            -- PURGED orders should be deleted after broadcast period (4 minutes)
+            shouldDelete = (currentTime - order.purgedAt) > Database.PURGE_TIMES.PURGE_BROADCAST
         end
         
-        if shouldRemove then
+        if shouldTransitionToPurged then
+            -- Transition to PURGED state (first time hitting purge time)
+            order.status = Database.STATUS.PURGED
+            order.purgedAt = GetCurrentTime()
+            order.version = (order.version or 1) + 1
+            removedCount = removedCount + 1  -- Count transitions as cleanup activity
+            
+            if Config.IsDebugMode() then
+                print(string.format("|cffAAAAFF[GWO Debug]|r Order transitioned to PURGED: %s", order.itemName or orderID))
+            end
+        elseif shouldDelete then
+            -- Delete PURGED orders after broadcast period
             table.insert(ordersToRemove, orderID)
         end
     end
     
-    -- Remove the orders
+    -- Remove orders that completed their broadcast period
     for _, orderID in ipairs(ordersToRemove) do
+        if Config.IsDebugMode() then
+            local order = GuildWorkOrdersDB.orders[orderID]
+            print(string.format("|cffAAAAFF[GWO Debug]|r Order permanently deleted: %s", order and order.itemName or orderID))
+        end
         GuildWorkOrdersDB.orders[orderID] = nil
         removedCount = removedCount + 1
     end
