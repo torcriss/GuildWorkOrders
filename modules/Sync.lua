@@ -362,7 +362,7 @@ function Sync.HandleNewOrder(parts, sender)
         quantity = tonumber(parts[7]),
         price = UnescapeDelimiters(parts[8]),
         timestamp = tonumber(parts[9]) or GetCurrentTime(),
-        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 1800),
+        expiresAt = tonumber(parts[10]) or (GetCurrentTime() + 180),
         version = tonumber(parts[11]) or 1,
         status = Database.STATUS.ACTIVE
     }
@@ -1040,13 +1040,13 @@ function Sync.SendHeartbeat()
         if order.status == Database.STATUS.ACTIVE or 
            order.status == Database.STATUS.PENDING or
            (order.status == Database.STATUS.EXPIRED and 
-            order.expiredAt and currentTime - order.expiredAt < 1800) or
+            order.expiredAt and currentTime - order.expiredAt < 180) or
            (order.status == Database.STATUS.FULFILLED and 
-            order.fulfilledAt and currentTime - order.fulfilledAt < 1800) or
+            order.fulfilledAt and currentTime - order.fulfilledAt < 180) or
            (order.status == Database.STATUS.CANCELLED and 
-            order.completedAt and currentTime - order.completedAt < 1800) or
+            order.completedAt and currentTime - order.completedAt < 180) or
            (order.status == Database.STATUS.CLEARED and 
-            order.clearedAt and currentTime - order.clearedAt < 1800) then
+            order.clearedAt and currentTime - order.clearedAt < 180) then
             
             table.insert(ordersToSend, order)
         end
@@ -1160,7 +1160,7 @@ function Sync.HandleHeartbeat(parts, sender)
             if #orderParts >= 13 then
                 -- Parse compressed heartbeat format
                 local timeAgo = tonumber(orderParts[7]) or 0
-                local ttl = tonumber(orderParts[8]) or 1800
+                local ttl = tonumber(orderParts[8]) or 180
                 local encodedStatus = orderParts[10]
                 local fulfilledBy = UnescapeDelimiters(orderParts[13])
                 
@@ -1203,7 +1203,7 @@ function Sync.HandleHeartbeat(parts, sender)
                     quantity = tonumber(orderParts[5]),
                     price = UnescapeDelimiters(orderParts[6]),
                     timestamp = tonumber(orderParts[7]) or GetCurrentTime(),
-                    expiresAt = tonumber(orderParts[8]) or (GetCurrentTime() + 1800),
+                    expiresAt = tonumber(orderParts[8]) or (GetCurrentTime() + 180),
                     version = tonumber(orderParts[9]) or 1,
                     status = orderParts[10],
                     pendingFulfiller = UnescapeDelimiters(orderParts[11]),

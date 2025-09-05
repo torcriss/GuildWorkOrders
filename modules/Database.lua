@@ -36,7 +36,7 @@ Database.LIMITS = {
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
-    CLEARED_CANCELLED_EXPIRED = 14400,  -- 4 hours for cleared/cancelled/expired orders
+    CLEARED_CANCELLED_EXPIRED = 360,    -- 6 minutes for testing (was 4 hours)
     FULFILLED = 86400                    -- 24 hours for fulfilled orders
 }
 
@@ -114,7 +114,7 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
         priceInCopper = priceInCopper,
         message = message or "",
         timestamp = GetCurrentTime(),
-        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 1800),
+        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 180),
         status = Database.STATUS.ACTIVE,
         version = 1
     }
@@ -263,7 +263,7 @@ function Database.GetMyCreatedOrders()
                 timeSinceCompleted = currentTime - order.expiredAt
             end
             
-            if timeSinceCompleted and timeSinceCompleted < 1800 then -- 30 minutes
+            if timeSinceCompleted and timeSinceCompleted < 180 then -- 3 minutes
                 table.insert(myOrders, order)
             end
         end
