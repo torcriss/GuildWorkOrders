@@ -16,8 +16,7 @@ Database.STATUS = {
     ACTIVE = "active",
     PENDING = "pending",       -- Someone requested fulfillment, awaiting creator response (DEPRECATED)
     FULFILLED = "fulfilled",   -- Successfully completed
-    CANCELLED = "cancelled",   -- Cancelled by user
-    EXPIRED = "expired",       -- Auto-expired after 30 minutes (distinct from fulfilled)
+    CANCELLED = "cancelled",   -- Cancelled by user or auto-expired
     CLEARED = "cleared",       -- Admin cleared (synced for 24 hours)
     FAILED = "failed"          -- Fulfillment attempted but failed
 }
@@ -36,7 +35,7 @@ Database.LIMITS = {
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
-    CLEARED_CANCELLED_EXPIRED = 360,    -- 6 minutes for testing (was 4 hours)
+    CLEARED_CANCELLED_EXPIRED = 120,    -- 2 minutes for testing (was 6 minutes)
     FULFILLED = 86400                    -- 24 hours for fulfilled orders
 }
 
@@ -114,7 +113,7 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
         priceInCopper = priceInCopper,
         message = message or "",
         timestamp = GetCurrentTime(),
-        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 180),
+        expiresAt = GetCurrentTime() + (Config.Get("orderExpiry") or 60),
         status = Database.STATUS.ACTIVE,
         version = 1
     }
@@ -175,7 +174,6 @@ function Database.GetAllOrders()
            order.expiresAt > GetCurrentTime() and
            order.status ~= Database.STATUS.FULFILLED and
            order.status ~= Database.STATUS.CANCELLED and
-           order.status ~= Database.STATUS.EXPIRED and
            order.status ~= Database.STATUS.CLEARED and
            order.status ~= Database.STATUS.FAILED then
             -- Clean up any corrupted item names
@@ -263,7 +261,7 @@ function Database.GetMyCreatedOrders()
                 timeSinceCompleted = currentTime - order.expiredAt
             end
             
-            if timeSinceCompleted and timeSinceCompleted < 180 then -- 3 minutes
+            if timeSinceCompleted and timeSinceCompleted < 60 then -- 1 minute
                 table.insert(myOrders, order)
             end
         end
@@ -310,7 +308,7 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     end
     
     -- Move to history if fulfilled, cancelled, or expired
-    if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED or newStatus == Database.STATUS.EXPIRED then
+    if newStatus == Database.STATUS.FULFILLED or newStatus == Database.STATUS.CANCELLED then
         Database.MoveToHistory(order)
         GuildWorkOrdersDB.orders[orderID] = nil
     end
@@ -392,8 +390,6 @@ function Database.DirectFulfillOrder(orderID, fulfillerName)
             return false, "Order already completed"
         elseif order.status == Database.STATUS.CANCELLED then
             return false, "Order was cancelled"
-        elseif order.status == Database.STATUS.EXPIRED then
-            return false, "Order has expired"
         else
             return false, "Order is no longer active"
         end
@@ -402,7 +398,7 @@ function Database.DirectFulfillOrder(orderID, fulfillerName)
     -- Check if order is expired
     if order.expiresAt and order.expiresAt < GetCurrentTime() then
         -- Set to expired and move to history
-        Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
+        Database.UpdateOrderStatus(orderID, Database.STATUS.CANCELLED)
         return false, "Order has expired"
     end
     
@@ -455,7 +451,6 @@ function Database.SyncOrder(orderData)
     -- Route order to appropriate storage based on status
     if orderData.status == Database.STATUS.FULFILLED or 
        orderData.status == Database.STATUS.CANCELLED or 
-       orderData.status == Database.STATUS.EXPIRED or
        orderData.status == Database.STATUS.CLEARED or
        orderData.status == Database.STATUS.FAILED then
         -- Completed orders go to history, remove from active orders
@@ -511,12 +506,7 @@ function Database.MoveToHistory(order)
     
     -- Add completion timestamp only if not already set
     if not order.completedAt then
-        if order.status == Database.STATUS.EXPIRED and order.expiresAt then
-            -- For expired orders, use the expiry time as completion time
-            order.completedAt = order.expiresAt
-        else
-            order.completedAt = GetCurrentTime()
-        end
+        order.completedAt = GetCurrentTime()
     end
     
     table.insert(GuildWorkOrdersDB.history, 1, order)
@@ -700,7 +690,7 @@ function Database.CleanupExpiredOrders()
                 -- Only the creator has authority to expire their own orders
                 if order.player == playerName then
                     -- I'm the creator - I have authority to expire it
-                    order.status = Database.STATUS.EXPIRED
+                    order.status = Database.STATUS.CANCELLED
                     order.expiredAt = currentTime
                     order.version = (order.version or 1) + 1
                     
@@ -716,7 +706,7 @@ function Database.CleanupExpiredOrders()
                     
                     -- Broadcast the expiration (not fulfillment)
                     if addon.Sync then
-                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.EXPIRED, order.version)
+                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.CANCELLED, order.version)
                     end
                     
                     -- Notify me that my order expired
@@ -767,7 +757,7 @@ function Database.PurgeOldOrders()
         -- Determine completion time based on status
         if order.status == Database.STATUS.CLEARED then
             completionTime = order.clearedAt
-        elseif order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED then
+        elseif order.status == Database.STATUS.CANCELLED then
             completionTime = order.completedAt
         elseif order.status == Database.STATUS.FULFILLED then
             completionTime = order.fulfilledAt
@@ -931,8 +921,7 @@ function Database.PurgeNonActiveOrders(targetCount)
     local clearedPurged = 0
     for _, order in ipairs(GuildWorkOrdersDB.history) do
         if order.status == Database.STATUS.CLEARED or 
-           order.status == Database.STATUS.CANCELLED or 
-           order.status == Database.STATUS.EXPIRED then
+           order.status == Database.STATUS.CANCELLED then
             clearedPurged = clearedPurged + 1
             purgeCount = purgeCount + 1
         else

@@ -2,7 +2,7 @@
 ## Title: Guild Work Orders
 ## Notes: Guild-wide work order management system for WoW Classic Era
 ## Author: Enhanced Version
-## Version: 2.6.4
+## Version: 2.7.0
 ## SavedVariables: GuildWorkOrdersDB
 
 modules\Config.lua

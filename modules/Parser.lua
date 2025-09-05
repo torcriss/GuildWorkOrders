@@ -324,7 +324,7 @@ function Parser.ProcessGuildMessage(message, sender)
             priceInCopper = Database.ParsePriceToCopper(orderData.price),
             message = orderData.rawMessage,
             timestamp = time(),
-            expiresAt = time() + (Config.Get("orderExpiry") or 180),
+            expiresAt = time() + (Config.Get("orderExpiry") or 60),
             status = Database.STATUS.ACTIVE,
             version = 1
         }

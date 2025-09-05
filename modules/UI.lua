@@ -500,7 +500,7 @@ function UI.CreateOrderRow(order, index)
         else
             timeText:SetText("|cff888888-|r")  -- Safety fallback
         end
-    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.EXPIRED or order.status == Database.STATUS.CLEARED then
+    elseif order.status == Database.STATUS.FULFILLED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED then
         -- Show "-" for completed orders to avoid timestamp fluctuations
         timeText:SetText("|cff888888-|r")
     else
@@ -528,8 +528,6 @@ function UI.CreateOrderRow(order, index)
             statusText:SetText("|cff00ff00Completed|r")
         elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
-        elseif order.status == Database.STATUS.EXPIRED then
-            statusText:SetText("|cffffff00Expired|r")
         elseif order.status == Database.STATUS.CLEARED then
             statusText:SetText("|cff888888Cleared|r")
         elseif order.status == Database.STATUS.FAILED then
@@ -617,9 +615,6 @@ function UI.CreateOrderRow(order, index)
             completedText:SetJustifyH("LEFT")
             if order.completedAt then
                 completedText:SetText("|cff888888" .. UI.FormatDateTime(order.completedAt) .. "|r")
-            elseif order.status == Database.STATUS.EXPIRED and order.expiresAt then
-                -- For expired orders without completedAt (from heartbeats), use expiresAt
-                completedText:SetText("|cff888888" .. UI.FormatDateTime(order.expiresAt) .. "|r")
             else
                 completedText:SetText("|cff888888-|r")
             end
@@ -642,8 +637,6 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cff00ff00Completed|r")
             elseif order.status == Database.STATUS.CANCELLED then
                 statusText:SetText("|cffff8080Cancelled|r")
-            elseif order.status == Database.STATUS.EXPIRED then
-                statusText:SetText("|cfffff080Expired|r")
             elseif order.status == Database.STATUS.CLEARED then
                 statusText:SetText("|cff888888Cleared|r")
             elseif order.status == Database.STATUS.FAILED then
@@ -1736,10 +1729,6 @@ function UI.UpdateOrderRowButton(row, order)
         end
     elseif order.status == Database.STATUS.PENDING then
         row.actionButton:SetText("Pending...")
-        row.actionButton:SetEnabled(false)
-        row.actionButton:Show()
-    elseif order.status == Database.STATUS.EXPIRED then
-        row.actionButton:SetText("Expired")
         row.actionButton:SetEnabled(false)
         row.actionButton:Show()
     elseif order.status == Database.STATUS.FULFILLED then

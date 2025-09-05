@@ -11,7 +11,7 @@ local defaultConfig = {
     autoSync = true,              -- Auto-sync on login
     syncTimeout = 30,             -- Sync timeout in seconds
     maxHistory = 200,             -- Max orders to keep in history
-    orderExpiry = 180,            -- 3 minutes in seconds (TESTING)
+    orderExpiry = 60,             -- 1 minute in seconds (TESTING)
     debugMode = false,            -- Debug output
     soundAlert = true,            -- Play sound on new orders
     whisperTemplate = "Is your %s still available? I'm interested in %s for %s.",  -- %s = item, quantity, price
@@ -118,12 +118,12 @@ function Config.UpdateDatabase()
         GuildWorkOrdersDB.syncData.heartbeatIndex = 1
     end
     
-    -- Config migration: Update orderExpiry from 24 hours to 3 minutes (TESTING)
-    if GuildWorkOrdersDB.config and (GuildWorkOrdersDB.config.orderExpiry == 86400 or GuildWorkOrdersDB.config.orderExpiry == 1800) then
-        GuildWorkOrdersDB.config.orderExpiry = 180
-        config.orderExpiry = 180  -- Update in-memory config too
+    -- Config migration: Update orderExpiry from 24 hours to 1 minute (TESTING)
+    if GuildWorkOrdersDB.config and (GuildWorkOrdersDB.config.orderExpiry == 86400 or GuildWorkOrdersDB.config.orderExpiry == 1800 or GuildWorkOrdersDB.config.orderExpiry == 180) then
+        GuildWorkOrdersDB.config.orderExpiry = 60
+        config.orderExpiry = 60  -- Update in-memory config too
         if config.debugMode then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Updated order expiry time to 3 minutes for testing")
+            print("|cff00ff00[GuildWorkOrders Debug]|r Updated order expiry time to 1 minute for testing")
         end
     end
     
