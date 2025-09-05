@@ -554,7 +554,7 @@ end
 function Sync.SendHeartbeat()
     if not Database then return end
     
-    local myOrders = Database.GetMyCreatedOrders()
+    local myOrders = Database.GetOrdersToHeartbeat()
     if Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r You have %d orders to share with guild", myOrders and #myOrders or 0))
     end
@@ -713,14 +713,17 @@ function Sync.HandleHeartbeat(parts, sender)
                     fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil
                 }
                 
-                -- Only accept heartbeat from the order creator
+                -- Accept heartbeat from creator OR anyone if order has fulfilledBy (relay mode)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
-                if orderData.player == sender or orderData.player == baseSenderName then
+                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
+                local hasFulfilledBy = (orderData.fulfilledBy and orderData.fulfilledBy ~= "")
+                
+                if isCreator or hasFulfilledBy then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
-                        orderData.player, sender))
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no fulfilledBy", 
+                        sender, orderData.player))
                 end
             elseif #orderParts >= 12 then
                 -- Handle legacy format for backward compatibility
@@ -739,13 +742,16 @@ function Sync.HandleHeartbeat(parts, sender)
                     pendingTimestamp = tonumber(orderParts[12]) or 0
                 }
                 
-                -- Only accept heartbeat from the order creator
+                -- Accept heartbeat from the order creator OR fulfiller (legacy format)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
-                if orderData.player == sender or orderData.player == baseSenderName then
+                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
+                -- Note: Legacy format doesn't have fulfilledBy field, so only check creator
+                
+                if isCreator then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: order creator (%s) != sender (%s)", 
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected legacy heartbeat: order creator (%s) != sender (%s)", 
                         orderData.player, sender))
                 end
             end
@@ -799,7 +805,17 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         return
     end
     
-    -- Sync all orders (SyncOrder now handles routing to appropriate storage)
+    -- Additional protection: Don't allow fulfilled orders to be overwritten by active ones
+    local existingOrder = GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id]
+    if existingOrder and existingOrder.fulfilledBy and not orderData.fulfilledBy then
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting heartbeat: trying to overwrite fulfilled order %s with active status", 
+                orderData.id))
+        end
+        return
+    end
+    
+    -- Sync all orders (SyncOrder handles version checking and routing to appropriate storage)
     local success = Database.SyncOrder(orderData)
     if success then
         if Config.IsDebugMode() then

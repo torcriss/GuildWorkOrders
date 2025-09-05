@@ -256,6 +256,49 @@ function Database.GetMyCreatedOrders()
     return myOrders
 end
 
+-- Get orders to broadcast via heartbeat (created by me, fulfilled by me, OR any fulfilled order for relay)
+function Database.GetOrdersToHeartbeat()
+    local playerName = UnitName("player")
+    local ordersToShare = {}
+    
+    -- Get active/pending orders I created + ANY fulfilled orders (for relay)
+    if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
+        for _, order in pairs(GuildWorkOrdersDB.orders) do
+            if order.player == playerName or -- Orders I created
+               order.fulfilledBy == playerName or -- Orders I fulfilled  
+               order.fulfilledBy then -- ANY fulfilled orders (relay mode)
+                table.insert(ordersToShare, order)
+            end
+        end
+    end
+    
+    -- Get recently completed orders (created by me, fulfilled by me, OR any fulfilled for relay)
+    local currentTime = GetCurrentTime()
+    local history = Database.GetHistory()
+    for _, order in ipairs(history) do
+        if order.player == playerName or -- Orders I created
+           order.fulfilledBy == playerName or -- Orders I fulfilled
+           (order.fulfilledBy and order.status == Database.STATUS.FULFILLED) then -- ANY fulfilled orders (relay mode)
+            
+            -- Only include recently completed orders (within 1 minute)
+            local timeSinceCompleted = nil
+            if order.completedAt then
+                timeSinceCompleted = currentTime - order.completedAt
+            elseif order.fulfilledAt then
+                timeSinceCompleted = currentTime - order.fulfilledAt
+            elseif order.expiredAt then
+                timeSinceCompleted = currentTime - order.expiredAt
+            end
+            
+            if timeSinceCompleted and timeSinceCompleted < 60 then -- 1 minute
+                table.insert(ordersToShare, order)
+            end
+        end
+    end
+    
+    return ordersToShare
+end
+
 -- Search orders by item name
 function Database.SearchOrders(searchText)
     if not searchText or searchText == "" then
