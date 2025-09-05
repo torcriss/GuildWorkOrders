@@ -261,24 +261,27 @@ function Database.GetOrdersToHeartbeat()
     local playerName = UnitName("player")
     local ordersToShare = {}
     
-    -- Get active/pending orders I created + ANY fulfilled orders (for relay)
+    -- Get active/pending orders I created + ANY fulfilled/cleared orders (for relay)
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for _, order in pairs(GuildWorkOrdersDB.orders) do
             if order.player == playerName or -- Orders I created
                order.fulfilledBy == playerName or -- Orders I fulfilled  
-               order.fulfilledBy then -- ANY fulfilled orders (relay mode)
+               order.fulfilledBy or -- ANY fulfilled orders (relay mode)
+               order.clearedBy then -- ANY cleared orders (relay mode)
                 table.insert(ordersToShare, order)
             end
         end
     end
     
-    -- Get recently completed orders (created by me, fulfilled by me, OR any fulfilled for relay)
+    -- Get recently completed orders (created by me, fulfilled by me, OR any completed for relay)
     local currentTime = GetCurrentTime()
     local history = Database.GetHistory()
     for _, order in ipairs(history) do
         if order.player == playerName or -- Orders I created
            order.fulfilledBy == playerName or -- Orders I fulfilled
-           (order.fulfilledBy and order.status == Database.STATUS.FULFILLED) then -- ANY fulfilled orders (relay mode)
+           (order.fulfilledBy and order.status == Database.STATUS.FULFILLED) or -- ANY fulfilled orders (relay mode)
+           (order.clearedBy and order.status == Database.STATUS.CLEARED) or -- ANY cleared orders (relay mode)
+           (order.status == Database.STATUS.CANCELLED) then -- ANY cancelled orders (relay mode)
             
             -- Only include recently completed orders (within 1 minute)
             local timeSinceCompleted = nil

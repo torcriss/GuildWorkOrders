@@ -631,7 +631,7 @@ function Sync.SendHeartbeat()
     local timeAgo, ttl = GetRelativeTimestamps(order)
     local encodedStatus = EncodeStatus(order.status)
     
-    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s",
+    local orderStr = string.format("%s:%s:%s:%s:%d:%s:%d:%d:%d:%s:%s:%d:%s:%s",
         order.id,
         order.type,
         order.player,
@@ -644,7 +644,8 @@ function Sync.SendHeartbeat()
         encodedStatus,
         EscapeDelimiters(order.pendingFulfiller or ""),
         order.pendingTimestamp or 0,
-        EscapeDelimiters(order.fulfilledBy or "")
+        EscapeDelimiters(order.fulfilledBy or ""),
+        EscapeDelimiters(order.clearedBy or "")
     )
     
     local heartbeatMessage = string.format("%s|%d|%d|%d|%s",
@@ -686,8 +687,36 @@ function Sync.HandleHeartbeat(parts, sender)
     for _, orderStr in ipairs(orderStrings) do
         if orderStr and orderStr ~= "" then
             local orderParts = {strsplit(":", orderStr)}
-            if #orderParts >= 13 then
-                -- Parse compressed heartbeat format
+            if #orderParts >= 14 then
+                -- Parse compressed heartbeat format with clearedBy field
+                local timeAgo = tonumber(orderParts[7]) or 0
+                local ttl = tonumber(orderParts[8]) or 60
+                local encodedStatus = orderParts[10]
+                local fulfilledBy = UnescapeDelimiters(orderParts[13])
+                local clearedBy = UnescapeDelimiters(orderParts[14])
+                
+                -- Restore absolute timestamps
+                local currentTime = GetCurrentTime()
+                local timestamp, expiresAt = RestoreAbsoluteTimestamps(timeAgo, ttl, currentTime)
+                
+                local orderData = {
+                    id = orderParts[1],
+                    type = orderParts[2],
+                    player = orderParts[3],
+                    itemLink = UnescapeDelimiters(orderParts[4]),
+                    quantity = tonumber(orderParts[5]),
+                    price = UnescapeDelimiters(orderParts[6]),
+                    timestamp = timestamp,
+                    expiresAt = expiresAt,
+                    version = tonumber(orderParts[9]) or 1,
+                    status = DecodeStatus(encodedStatus),
+                    pendingFulfiller = UnescapeDelimiters(orderParts[11]),
+                    pendingTimestamp = tonumber(orderParts[12]) or 0,
+                    fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil,
+                    clearedBy = clearedBy ~= "" and clearedBy or nil
+                }
+            elseif #orderParts >= 13 then
+                -- Parse legacy format without clearedBy field
                 local timeAgo = tonumber(orderParts[7]) or 0
                 local ttl = tonumber(orderParts[8]) or 60
                 local encodedStatus = orderParts[10]
@@ -713,16 +742,18 @@ function Sync.HandleHeartbeat(parts, sender)
                     fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil
                 }
                 
-                -- Accept heartbeat from creator OR anyone if order has fulfilledBy (relay mode)
+                -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
                 local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
                 local hasFulfilledBy = (orderData.fulfilledBy and orderData.fulfilledBy ~= "")
+                local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
+                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
                 
-                if isCreator or hasFulfilledBy then
+                if isCreator or hasFulfilledBy or hasClearedBy or isCancelled then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no fulfilledBy", 
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
                         sender, orderData.player))
                 end
             elseif #orderParts >= 12 then
@@ -742,16 +773,17 @@ function Sync.HandleHeartbeat(parts, sender)
                     pendingTimestamp = tonumber(orderParts[12]) or 0
                 }
                 
-                -- Accept heartbeat from the order creator OR fulfiller (legacy format)
+                -- Accept heartbeat from creator OR for cancelled orders (legacy format)
                 -- Handle both with and without realm suffix in sender name
                 local baseSenderName = strsplit("-", sender)
                 local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                -- Note: Legacy format doesn't have fulfilledBy field, so only check creator
+                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
+                -- Note: Legacy format doesn't have fulfilledBy/clearedBy fields
                 
-                if isCreator then
+                if isCreator or isCancelled then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected legacy heartbeat: order creator (%s) != sender (%s)", 
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected legacy heartbeat: sender (%s) not creator (%s) and not cancelled", 
                         orderData.player, sender))
                 end
             end
