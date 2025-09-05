@@ -328,10 +328,7 @@ function Database.CompleteFulfillment(orderID)
         return false, "You can only complete fulfillment of your own orders"
     end
     
-    -- Order must be in pending state
-    if order.status ~= Database.STATUS.PENDING then
-        return false, "Order is not pending fulfillment"
-    end
+    -- PENDING status removed from system - order completion proceeds without pending state
     
     -- Complete the fulfillment
     return Database.UpdateOrderStatus(orderID, Database.STATUS.COMPLETED, order.pendingFulfiller)
@@ -596,6 +593,20 @@ function Database.CleanupOldOrders()
         local shouldTransitionToPurged = false
         local shouldDelete = false
         
+        -- Add fallback timestamps for legacy orders that have status but missing timestamps
+        if order.status == Database.STATUS.EXPIRED and not order.expiredAt then
+            order.expiredAt = order.timestamp or (currentTime - Database.PURGE_TIMES.NON_ACTIVE - 1)
+        end
+        if order.status == Database.STATUS.CANCELLED and not order.cancelledAt then
+            order.cancelledAt = order.timestamp or (currentTime - Database.PURGE_TIMES.NON_ACTIVE - 1)
+        end
+        if order.status == Database.STATUS.COMPLETED and not order.completedAt then
+            order.completedAt = order.timestamp or (currentTime - Database.PURGE_TIMES.NON_ACTIVE - 1)
+        end
+        if order.status == Database.STATUS.CLEARED and not order.clearedAt then
+            order.clearedAt = order.timestamp or (currentTime - Database.PURGE_TIMES.NON_ACTIVE - 1)
+        end
+        
         -- Check if non-active orders should transition to PURGED (after 2 minutes)
         if order.status == Database.STATUS.CANCELLED and order.cancelledAt then
             shouldTransitionToPurged = (currentTime - order.cancelledAt) > Database.PURGE_TIMES.NON_ACTIVE
@@ -656,8 +667,8 @@ function Database.CleanupExpiredOrders()
     
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
         if order.expiresAt and order.expiresAt < currentTime then
-            -- Only process expired orders that are still active or pending
-            if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+            -- Only process expired orders that are still active
+            if order.status == Database.STATUS.ACTIVE then
                 -- Only the creator has authority to expire their own orders
                 if order.player == playerName then
                     -- Notify pending fulfiller that order expired
@@ -735,7 +746,7 @@ function Database.GetActiveOrderCount()
     
     local count = 0
     for _, order in pairs(GuildWorkOrdersDB.orders) do
-        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
+        if order.status == Database.STATUS.ACTIVE then
             count = count + 1
         end
     end
@@ -827,7 +838,7 @@ function Database.GetStats()
     if GuildWorkOrdersDB and GuildWorkOrdersDB.orders then
         for _, order in pairs(GuildWorkOrdersDB.orders) do
             allOrders = allOrders + 1
-            if order.status ~= Database.STATUS.ACTIVE and order.status ~= Database.STATUS.PENDING then
+            if order.status ~= Database.STATUS.ACTIVE then
                 completedOrders = completedOrders + 1
             end
         end
