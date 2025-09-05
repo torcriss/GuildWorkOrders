@@ -869,6 +869,22 @@ function UI.RefreshOrders()
     -- Get orders based on current tab
     local orders = UI.GetFilteredOrders()
     
+    -- Check for expired orders and clean them up immediately
+    local hasExpiredOrders = false
+    for _, order in ipairs(orders) do
+        if order.expiresAt and order.expiresAt < GetCurrentTime() and 
+           (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING) then
+            hasExpiredOrders = true
+            break
+        end
+    end
+    
+    if hasExpiredOrders and Database.CleanupExpiredOrders then
+        Database.CleanupExpiredOrders()
+        -- Re-fetch orders after cleanup to get updated statuses
+        orders = UI.GetFilteredOrders()
+    end
+    
     -- Create/update rows
     for i, order in ipairs(orders) do
         local row = UI.CreateOrderRow(order, i)

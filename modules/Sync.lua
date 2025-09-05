@@ -669,10 +669,7 @@ function Sync.SendHeartbeat()
         end
     end
     
-    -- Cleanup expired orders occasionally (every 60 heartbeats = 3 minutes)
-    if (heartbeatIndex % 60) == 0 then
-        Database.CleanupExpiredOrders()
-    end
+    -- Periodic cleanup removed - using FIFO-only system
 end
 
 -- Handle heartbeat messages

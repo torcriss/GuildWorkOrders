@@ -44,13 +44,7 @@ local function Initialize()
         end
     end)
     
-    -- Periodic cleanup timer (every 10 minutes)
-    C_Timer.NewTicker(600, function()
-        if addon.Database then
-            addon.Database.CleanupExpiredOrders()
-        end
-        -- Online user cleanup removed
-    end)
+    -- Periodic cleanup removed - using FIFO-only system
     
     if addon.Config and addon.Config.IsDebugMode() then
         print("|cff00ff00[GuildWorkOrders Debug]|r All modules initialized successfully")

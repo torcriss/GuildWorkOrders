@@ -722,16 +722,14 @@ function Database.CleanupExpiredOrders()
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d expired orders", expiredCount))
     end
     
-    -- After processing expired orders, purge old orders from history
-    local purgedCount = Database.PurgeOldOrders()
-    if purgedCount > 0 and Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Auto-purged %d old orders during cleanup", purgedCount))
-    end
+    -- Purging removed - using FIFO-only system
     
     return expiredCount
 end
 
+-- REMOVED: Time-based purging replaced with FIFO-only system
 -- Purge old orders from history based on status and age
+--[[
 function Database.PurgeOldOrders()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.history then
         return 0
@@ -797,6 +795,7 @@ function Database.PurgeOldOrders()
     
     return purgedCount
 end
+--]]
 
 -- Get total order count (active + pending + history)
 function Database.GetTotalOrderCount()
