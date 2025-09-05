@@ -119,7 +119,7 @@ function Sync.Initialize()
     Sync.StartHeartbeat()
     
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Guild communication system ready - heartbeat every 3 seconds")
+        print("|cffAAAAFF[GWO Debug]|r Guild sync ready - heartbeat every 3s")
     end
 end
 
@@ -515,7 +515,7 @@ function Sync.HandleFulfillAccept(parts, sender)
     end
     
     -- Show notification
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Your fulfillment request was accepted! Contact %s to arrange the trade.", sender))
+    print(string.format("|cff00ff00[GWO]|r Your fulfillment request was accepted! Contact %s to arrange the trade.", sender))
 end
 
 -- Handle fulfillment rejection (Requester receives this) 
@@ -543,7 +543,7 @@ function Sync.HandleFulfillReject(parts, sender)
     end
     
     -- Show notification
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfillment request rejected: %s", reason))
+    print(string.format("|cff00ff00[GWO]|r Fulfillment request rejected: %s", reason))
 end
 
 -- ============================================================================
@@ -946,7 +946,7 @@ function Sync.HandleClearAll(parts, sender)
             end
         end
         
-        print("|cffFFAA00[GuildWorkOrders]|r All orders have been cleared by guild admin")
+        print("|cffFFAA00[GWO]|r All orders have been cleared by guild admin")
     end
 end
 
@@ -1000,7 +1000,7 @@ function Sync.HandleClearSingle(parts, sender)
         end
     end
     
-    print(string.format("|cffFFAA00[GuildWorkOrders]|r Order cleared by admin: %s", clearedBy))
+    print(string.format("|cffFFAA00[GWO]|r Order cleared by admin: %s", clearedBy))
 end
 
 -- Broadcast single order clear command to guild

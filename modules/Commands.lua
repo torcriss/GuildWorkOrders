@@ -31,7 +31,7 @@ function Commands.Initialize()
     SlashCmdList["GWO"] = Commands.HandleSlashCommand
     
     if Config.IsDebugMode() then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Commands module initialized")
+        print("|cffAAAAFF[GWO Debug]|r Commands module initialized")
     end
 end
 
@@ -56,7 +56,7 @@ end
 
 -- Show help
 function Commands.ShowHelp()
-    print("|cff00ff00[GuildWorkOrders]|r Available commands:")
+    print("|cff00ff00[GWO]|r Available commands:")
     for _, cmd in ipairs(COMMAND_LIST) do
         print(string.format("  |cffFFD700/gwo %s|r - %s", cmd.cmd, cmd.desc))
     end
@@ -67,7 +67,7 @@ function Commands.ShowUI()
     if UI then
         UI.Show()
     else
-        print("|cffff0000[GuildWorkOrders]|r UI not available")
+        print("|cffff0000[GWO]|r UI not available")
     end
 end
 
@@ -90,14 +90,14 @@ end
 function Commands.PostOrder(args)
     -- Parse: post WTB [Iron Ore] 20 5g
     if #args < 3 then
-        print("|cffff0000[GuildWorkOrders]|r Usage: /gwo post <WTB/WTS> [item] <quantity> <price>")
+        print("|cffff0000[GWO]|r Usage: /gwo post <WTB/WTS> [item] <quantity> <price>")
         print("  Example: /gwo post WTB [Iron Ore] 20 5g")
         return
     end
     
     local orderType = string.upper(args[2])
     if orderType ~= "WTB" and orderType ~= "WTS" then
-        print("|cffff0000[GuildWorkOrders]|r Order type must be WTB or WTS")
+        print("|cffff0000[GWO]|r Order type must be WTB or WTS")
         return
     end
     
@@ -105,7 +105,7 @@ function Commands.PostOrder(args)
     local fullText = table.concat(args, " ", 3)
     local itemName = string.match(fullText, "%[(.-)%]")
     if not itemName then
-        print("|cffff0000[GuildWorkOrders]|r Item must be in brackets: [Item Name]")
+        print("|cffff0000[GWO]|r Item must be in brackets: [Item Name]")
         return
     end
     
@@ -118,7 +118,7 @@ function Commands.PostOrder(args)
     local price = parts[2]
     
     if not quantity or quantity < 1 then
-        print("|cffff0000[GuildWorkOrders]|r Invalid quantity")
+        print("|cffff0000[GWO]|r Invalid quantity")
         return
     end
     
@@ -126,7 +126,7 @@ function Commands.PostOrder(args)
     local itemLink = "[" .. itemName .. "]"
     local isValid, errors = Parser.ValidateOrderData(orderType, itemLink, quantity, price)
     if not isValid then
-        print("|cffff0000[GuildWorkOrders]|r " .. table.concat(errors, ", "))
+        print("|cffff0000[GWO]|r " .. table.concat(errors, ", "))
         return
     end
     
@@ -141,7 +141,7 @@ function Commands.PostOrder(args)
             SendChatMessage(message, "GUILD")
         end
         
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Created %s order: %dx %s for %s",
+        print(string.format("|cff00ff00[GWO]|r Created %s order: %dx %s for %s",
             orderType, quantity, itemName, price or "negotiable"))
     end
 end
@@ -157,7 +157,7 @@ function Commands.ListOrders(orderType)
         elseif orderType == "WTS" then
             orders = Database.GetOrdersByType(Database.TYPE.WTS)
         else
-            print("|cffff0000[GuildWorkOrders]|r Invalid type. Use WTB or WTS")
+            print("|cffff0000[GWO]|r Invalid type. Use WTB or WTS")
             return
         end
     else
@@ -165,12 +165,12 @@ function Commands.ListOrders(orderType)
     end
     
     if #orders == 0 then
-        print("|cff00ff00[GuildWorkOrders]|r No orders found")
+        print("|cff00ff00[GWO]|r No orders found")
         return
     end
     
     local typeText = orderType or "All"
-    print(string.format("|cff00ff00[GuildWorkOrders]|r %s Orders (%d):", typeText, #orders))
+    print(string.format("|cff00ff00[GWO]|r %s Orders (%d):", typeText, #orders))
     
     for i, order in ipairs(orders) do
         if i <= 10 then  -- Limit to 10 for chat
@@ -199,18 +199,18 @@ end
 -- Search orders
 function Commands.SearchOrders(searchText)
     if not searchText or searchText == "" then
-        print("|cffff0000[GuildWorkOrders]|r Usage: /gwo search <item name>")
+        print("|cffff0000[GWO]|r Usage: /gwo search <item name>")
         return
     end
     
     local orders = Database.SearchOrders(searchText)
     
     if #orders == 0 then
-        print(string.format("|cff00ff00[GuildWorkOrders]|r No orders found for '%s'", searchText))
+        print(string.format("|cff00ff00[GWO]|r No orders found for '%s'", searchText))
         return
     end
     
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Search results for '%s' (%d):", searchText, #orders))
+    print(string.format("|cff00ff00[GWO]|r Search results for '%s' (%d):", searchText, #orders))
     
     for i, order in ipairs(orders) do
         if i <= 5 then  -- Limit search results
@@ -240,11 +240,11 @@ function Commands.ListMyOrders()
     local orders = Database.GetMyOrders()
     
     if #orders == 0 then
-        print("|cff00ff00[GuildWorkOrders]|r You have no active orders")
+        print("|cff00ff00[GWO]|r You have no active orders")
         return
     end
     
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Your Orders (%d):", #orders))
+    print(string.format("|cff00ff00[GWO]|r Your Orders (%d):", #orders))
     
     for i, order in ipairs(orders) do
         local qtyText = order.quantity and (tostring(order.quantity) .. "x ") or ""
@@ -267,14 +267,14 @@ end
 function Commands.CancelOrder(orderNum)
     local orderIndex = tonumber(orderNum)
     if not orderIndex then
-        print("|cffff0000[GuildWorkOrders]|r Usage: /gwo cancel <order number>")
+        print("|cffff0000[GWO]|r Usage: /gwo cancel <order number>")
         print("Use '/gwo my' to see your orders with numbers")
         return
     end
     
     local myOrders = Database.GetMyOrders()
     if orderIndex < 1 or orderIndex > #myOrders then
-        print("|cffff0000[GuildWorkOrders]|r Invalid order number")
+        print("|cffff0000[GWO]|r Invalid order number")
         return
     end
     
@@ -283,13 +283,13 @@ function Commands.CancelOrder(orderNum)
     
     if success then
         Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, (order.version or 1) + 1)
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Cancelled order: %s", order.itemName))
+        print(string.format("|cff00ff00[GWO]|r Cancelled order: %s", order.itemName))
         
         if UI then
             UI.RefreshOrders()
         end
     else
-        print("|cffff0000[GuildWorkOrders]|r Failed to cancel order")
+        print("|cffff0000[GWO]|r Failed to cancel order")
     end
 end
 
@@ -297,14 +297,14 @@ end
 function Commands.FulfillOrder(orderNum)
     local orderIndex = tonumber(orderNum)
     if not orderIndex then
-        print("|cffff0000[GuildWorkOrders]|r Usage: /gwo fulfill <order number>")
+        print("|cffff0000[GWO]|r Usage: /gwo fulfill <order number>")
         print("Use '/gwo my' to see your orders with numbers")
         return
     end
     
     local myOrders = Database.GetMyOrders()
     if orderIndex < 1 or orderIndex > #myOrders then
-        print("|cffff0000[GuildWorkOrders]|r Invalid order number")
+        print("|cffff0000[GWO]|r Invalid order number")
         return
     end
     
@@ -313,13 +313,13 @@ function Commands.FulfillOrder(orderNum)
     
     if success then
         Sync.BroadcastOrderUpdate(order.id, Database.STATUS.FULFILLED, (order.version or 1) + 1)
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Fulfilled order: %s", order.itemName))
+        print(string.format("|cff00ff00[GWO]|r Fulfilled order: %s", order.itemName))
         
         if UI then
             UI.RefreshOrders()
         end
     else
-        print("|cffff0000[GuildWorkOrders]|r Failed to fulfill order")
+        print("|cffff0000[GWO]|r Failed to fulfill order")
     end
 end
 
@@ -327,9 +327,9 @@ end
 function Commands.ForceSync()
     if Sync then
         -- Full sync disabled - heartbeat-only system
-        print("|cff00ff00[GuildWorkOrders]|r Orders sync automatically via heartbeat every 3 seconds")
+        print("|cff00ff00[GWO]|r Orders sync automatically via heartbeat every 3 seconds")
     else
-        print("|cffff0000[GuildWorkOrders]|r Sync not available")
+        print("|cffff0000[GWO]|r Sync not available")
     end
 end
 
@@ -339,9 +339,9 @@ function Commands.ToggleDebug()
         local currentDebug = Config.Get("debugMode") or false
         Config.Set("debugMode", not currentDebug)
         local newState = not currentDebug and "enabled" or "disabled"
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Debug mode %s", newState))
+        print(string.format("|cff00FF00[GWO]|r Debug mode %s", newState))
     else
-        print("|cffff0000[GuildWorkOrders]|r Config not available")
+        print("|cffFF6B6B[GWO]|r Config not available")
     end
 end
 
@@ -350,7 +350,7 @@ function Commands.ShowStats()
     local stats = Database.GetStats()
     local syncStatus = Sync and Sync.GetSyncStatus() or {}
     
-    print("|cff00ff00[GuildWorkOrders]|r Statistics:")
+    print("|cff00ff00[GWO]|r Statistics:")
     print(string.format("  Active Orders: %d", stats.activeOrders))
     print(string.format("  - WTB Orders: %d", stats.wtbOrders))
     print(string.format("  - WTS Orders: %d", stats.wtsOrders))
@@ -373,7 +373,7 @@ end
 function Commands.HandleConfig(args)
     if #args == 1 then
         -- Show current config
-        print("|cff00ff00[GuildWorkOrders]|r Current Configuration:")
+        print("|cff00ff00[GWO]|r Current Configuration:")
         local settings = {
             "enabled", "announceToGuild", "announceFormat", "autoSync",
             "debugMode", "soundAlert", "orderExpiry"
@@ -398,9 +398,9 @@ function Commands.HandleConfig(args)
         end
         
         Config.Set(setting, value)
-        print(string.format("|cff00ff00[GuildWorkOrders]|r Set %s = %s", setting, tostring(value)))
+        print(string.format("|cff00ff00[GWO]|r Set %s = %s", setting, tostring(value)))
     else
-        print("|cffff0000[GuildWorkOrders]|r Usage:")
+        print("|cffff0000[GWO]|r Usage:")
         print("  /gwo config - Show current settings")
         print("  /gwo config <setting> <value> - Change setting")
     end
@@ -423,23 +423,15 @@ function Commands.ResetConfig()
     StaticPopup_Show("GWO_RESET_CONFIG")
 end
 
--- Toggle debug mode
-function Commands.ToggleDebug()
-    local currentDebug = Config.Get("debugMode")
-    Config.Set("debugMode", not currentDebug)
-    
-    local status = Config.Get("debugMode") and "enabled" or "disabled"
-    print(string.format("|cff00ff00[GuildWorkOrders]|r Debug mode %s", status))
-end
+-- REMOVED: Duplicate ToggleDebug function
 
 -- Show version
 function Commands.ShowVersion()
-    print("|cff00ff00[GuildWorkOrders]|r Version 2.1.0")
+    print("|cff00FF00[GWO]|r Version 3.1.0 - Unified Database System")
     print("  WoW Classic Era Interface 11507")
     if Config.IsDebugMode() then
         local syncStatus = Sync and Sync.GetSyncStatus() or {}
         print(string.format("  Protocol Version: %d", 1))
-        print(string.format("  Online Users: %d", syncStatus.onlineUsers or 0))
     end
 end
 
@@ -447,18 +439,18 @@ end
 function Commands.ToggleMinimapButton()
     local Minimap = addon.Minimap
     if not Minimap then
-        print("|cffff0000[GuildWorkOrders]|r Minimap module not available")
+        print("|cffff0000[GWO]|r Minimap module not available")
         return
     end
     
     if Minimap.IsShown() then
         Minimap.Hide()
         Config.Set("showMinimapButton", false)
-        print("|cff00ff00[GuildWorkOrders]|r Minimap button hidden")
+        print("|cff00ff00[GWO]|r Minimap button hidden")
     else
         Minimap.Show()
         Config.Set("showMinimapButton", true)
-        print("|cff00ff00[GuildWorkOrders]|r Minimap button shown")
+        print("|cff00ff00[GWO]|r Minimap button shown")
     end
 end
 

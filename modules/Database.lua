@@ -110,7 +110,7 @@ function Database.CreateOrder(orderType, itemLink, quantity, price, message)
     GuildWorkOrdersDB.orders[order.id] = order
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Created %s order: %dx %s for %s",
+        print(string.format("|cffAAAAFF[GWO Debug]|r Created %s order: %dx %s for %s",
             orderType == Database.TYPE.WTB and "buy" or "sell", quantity or 1, itemName, price or "negotiate"))
     end
     
@@ -310,7 +310,7 @@ function Database.UpdateOrderStatus(orderID, newStatus, fulfilledBy)
     -- Orders stay in single database - no moving to history needed
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order status changed: %s -> %s%s",
+        print(string.format("|cffAAAAFF[GWO Debug]|r Order status: %s -> %s%s",
             oldStatus, newStatus, fulfilledBy and (" by " .. fulfilledBy) or ""))
     end
     
@@ -501,12 +501,12 @@ function Database.BroadcastClearAll(callback)
     
     local totalOrders = #orders
     if totalOrders == 0 then
-        print("|cff00ff00[GuildWorkOrders]|r No active orders to cancel")
+        print("|cff00ff00[GWO]|r No active orders to cancel")
         if callback then callback() end
         return true
     end
     
-    print(string.format("|cffFFAA00[GuildWorkOrders]|r Broadcasting cancellation of %d orders to all users...", totalOrders))
+    print(string.format("|cffFFAA00[GWO]|r Broadcasting cancellation of %d orders to all users...", totalOrders))
     
     -- Broadcast cancellations with rate limiting (5 per second to avoid spam)
     local currentIndex = 1
@@ -523,7 +523,7 @@ function Database.BroadcastClearAll(callback)
             
             -- Update progress every 10 orders
             if currentIndex % 10 == 0 or currentIndex == totalOrders then
-                print(string.format("|cffFFAA00[GuildWorkOrders]|r Cancelled %d/%d orders...", currentIndex, totalOrders))
+                print(string.format("|cffFFAA00[GWO]|r Cancelled %d/%d orders...", currentIndex, totalOrders))
             end
             
             currentIndex = currentIndex + 1
@@ -532,7 +532,7 @@ function Database.BroadcastClearAll(callback)
             if broadcastTimer then
                 broadcastTimer:Cancel()
             end
-            print("|cff00ff00[GuildWorkOrders]|r All order cancellations broadcast successfully")
+            print("|cff00ff00[GWO]|r All order cancellations broadcast successfully")
             if callback then callback() end
         end
     end
@@ -618,7 +618,7 @@ function Database.CleanupOldOrders()
     end
     
     if Config.IsDebugMode() and removedCount > 0 then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Cleaned up %d old completed orders", removedCount))
+        print(string.format("|cffAAAAFF[GWO Debug]|r Cleaned up %d old orders", removedCount))
     end
     
     return removedCount
@@ -643,8 +643,9 @@ function Database.CleanupExpiredOrders()
                 if order.player == playerName then
                     -- Notify pending fulfiller that order expired
                     if order.pendingFulfiller then
-                        print(string.format("|cffFFFF00[GuildWorkOrders]|r Your pending order for %s has expired", 
-                            order.itemName or "item"))
+                        local ttlMinutes = math.floor((Config.Get("orderExpiry") or 60) / 60)
+                        print(string.format("|cffFFFF00[GWO]|r Your order for %s expired after %d minute%s", 
+                            order.itemName or "item", ttlMinutes, ttlMinutes == 1 and "" or "s"))
                     end
                     
                     -- Use UpdateOrderStatus to properly handle the expiry
@@ -662,7 +663,7 @@ function Database.CleanupExpiredOrders()
                     -- Notify me that my order expired
                     local ttlMinutes = math.floor((Config.Get("orderExpiry") or 60) / 60)
                     local timeText = ttlMinutes > 1 and string.format("%d minutes", ttlMinutes) or "1 minute"
-                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after %s", 
+                    print(string.format("|cffFFFF00[GWO]|r Your %s order for %s has expired after %s", 
                         order.type, order.itemName or "item", timeText))
                         
                 else

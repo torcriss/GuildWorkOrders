@@ -60,7 +60,7 @@ function Config.Load()
     Config.UpdateDatabase()
     
     if config.debugMode then
-        print("|cff00ff00[GuildWorkOrders Debug]|r Settings loaded from saved data")
+        print("|cffAAAAFF[GWO Debug]|r Settings loaded from saved data")
     end
 end
 
@@ -89,7 +89,7 @@ function Config.Reset()
         config[k] = v
     end
     Config.Save()
-    print("|cff00ff00[GuildWorkOrders]|r Configuration reset to defaults")
+    print("|cff00FF00[GWO]|r Configuration reset to defaults")
 end
 
 function Config.UpdateDatabase()

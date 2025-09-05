@@ -2,3 +2,4 @@
 - you are forgetting to always deploy.sh when there's a change
 - make sure to always update the toc files and lua files for version change when releasing
 - I also always just want the latest release available on github. We should just have 1 version available.
+- add a rule that before deploying, you must commit

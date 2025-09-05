@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "3.0.0"
-addon.build = "Simplified Heartbeat-Only System"
+addon.version = "3.1.0"
+addon.build = "Unified Database System"
 
 -- Core initialization
 local function Initialize()

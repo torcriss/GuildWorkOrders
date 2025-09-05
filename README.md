@@ -186,9 +186,36 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v2.5.1** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v3.1.1** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v2.5.1)
+## Recent Updates (v3.1.1)
+
+### 🎨 UI Display Improvements
+- **Status Column Display** - Fixed expired orders showing "expired" (lowercase) instead of "Expired" (capitalized) in the Status column
+- **Column Header Simplification** - Changed "Action/Date" column header to "Action" in All Orders tab for cleaner interface
+- **Message Standardization** - All console messages now use consistent `[GWO]` prefix instead of `[GuildWorkOrders]` for brevity
+
+### 🔧 Technical Improvements
+- **Status Display Logic** - Added explicit case for `Database.STATUS.EXPIRED` in UI status display logic
+- **Message Consistency** - Standardized color coding across all debug, success, and error messages
+- **Code Cleanup** - Improved maintainability with consistent message formatting throughout
+
+## Previous Updates (v3.1.0)
+
+### 🚀 Major System Overhaul
+- **Unified Database Architecture** - Simplified from dual (active/history) to single unified database
+- **Automatic Cleanup System** - Time-based cleanup on order creation instead of timer-based
+  - 2 minutes for cancelled/cleared/expired orders
+  - 4 minutes for fulfilled orders  
+- **No Limits** - Removed FIFO concept and all order count limits
+- **No Backward Compatibility** - Clean slate approach since addon hasn't launched
+
+### ⚡ Enhanced Performance
+- **Streamlined Message System** - Standardized `[GWO]` prefix reduces message length
+- **Simplified Architecture** - Removed hundreds of lines of legacy complexity
+- **Better Resource Usage** - Single database reduces memory overhead and sync complexity
+
+## Previous Updates (v2.5.1)
 
 ### 🐛 Bug Fixes & Improvements
 - **Expired Orders Display** - Fixed display of expired orders showing as "Expired" instead of "Cancelled"

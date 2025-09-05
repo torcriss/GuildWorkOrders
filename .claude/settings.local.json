@@ -6,7 +6,9 @@
       "Bash(git push:*)",
       "Bash(git fetch:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(grep:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,8 +1,8 @@
 ## Interface: 11507
 ## Title: Guild Work Orders
-## Notes: Guild-wide work order management system for WoW Classic Era
-## Author: Enhanced Version
-## Version: 3.0.0
+## Notes: Streamlined guild-wide work order system with automatic cleanup
+## Author: Enhanced for Classic Era
+## Version: 3.1.0
 ## SavedVariables: GuildWorkOrdersDB
 
 modules\Config.lua
