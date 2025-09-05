@@ -689,24 +689,29 @@ function Database.CleanupExpiredOrders()
             if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.PENDING then
                 -- Only the creator has authority to expire their own orders
                 if order.player == playerName then
-                    -- I'm the creator - I have authority to expire it
-                    order.status = Database.STATUS.CANCELLED
-                    order.expiredAt = currentTime
-                    order.version = (order.version or 1) + 1
-                    
                     -- Notify pending fulfiller that order expired
                     if order.pendingFulfiller then
                         print(string.format("|cffFFFF00[GuildWorkOrders]|r Your pending order for %s has expired", 
                             order.itemName or "item"))
                     end
                     
-                    Database.MoveToHistory(order)
-                    table.insert(toRemove, orderID)
+                    -- Use UpdateOrderStatus to properly handle the expiry
+                    Database.UpdateOrderStatus(orderID, Database.STATUS.CANCELLED)
+                    
+                    -- Add expiry timestamp (after status update since order might be moved)
+                    -- Find the order in history to add expiredAt timestamp
+                    for _, historyOrder in ipairs(GuildWorkOrdersDB.history or {}) do
+                        if historyOrder.id == orderID then
+                            historyOrder.expiredAt = currentTime
+                            break
+                        end
+                    end
+                    
                     expiredCount = expiredCount + 1
                     
                     -- Broadcast the expiration (not fulfillment)
                     if addon.Sync then
-                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.CANCELLED, order.version)
+                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.CANCELLED, order.version or 1)
                     end
                     
                     -- Notify me that my order expired
