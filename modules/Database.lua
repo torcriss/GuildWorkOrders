@@ -701,8 +701,10 @@ function Database.CleanupExpiredOrders()
                     end
                     
                     -- Notify me that my order expired
-                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after 30 minutes", 
-                        order.type, order.itemName or "item"))
+                    local ttlMinutes = math.floor((Config.Get("orderExpiry") or 60) / 60)
+                    local timeText = ttlMinutes > 1 and string.format("%d minutes", ttlMinutes) or "1 minute"
+                    print(string.format("|cffFFFF00[GuildWorkOrders]|r Your %s order for %s has expired after %s", 
+                        order.type, order.itemName or "item", timeText))
                         
                 else
                     -- Not my order - just remove from my local view
