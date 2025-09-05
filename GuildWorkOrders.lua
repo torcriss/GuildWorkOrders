@@ -44,7 +44,19 @@ local function Initialize()
         end
     end)
     
-    -- Periodic cleanup removed - using FIFO-only system
+    -- Periodic cleanup timer (every 30 seconds) for order expiration and purging
+    C_Timer.NewTicker(30, function()
+        if addon.Database then
+            -- First expire active orders that exceeded TTL
+            addon.Database.CleanupExpiredOrders()
+            -- Then purge old non-active orders (PURGED state and deletion)
+            addon.Database.CleanupOldOrders()
+            
+            if addon.Config and addon.Config.IsDebugMode() then
+                print("|cffAAAAFF[GWO Debug]|r Periodic cleanup cycle completed")
+            end
+        end
+    end)
     
     if addon.Config and addon.Config.IsDebugMode() then
         print("|cff00ff00[GuildWorkOrders Debug]|r All modules initialized successfully")
