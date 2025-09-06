@@ -686,25 +686,17 @@ function Database.CleanupExpiredOrders()
         if order.expiresAt and order.expiresAt < currentTime then
             -- Only process expired orders that are still active
             if order.status == Database.STATUS.ACTIVE then
-                -- Only the creator has authority to expire their own orders
-                if order.player == playerName then
+                -- Any client can expire orders that have exceeded their TTL
+                -- Only show notifications to the creator
+                local isMyOrder = (order.player == playerName)
+                
+                -- Process expiration for all orders
+                if isMyOrder then
                     -- Notify pending fulfiller that order expired
                     if order.pendingFulfiller then
                         local ttlMinutes = math.floor((Config.Get("orderExpiry") or 60) / 60)
                         print(string.format("|cffFFFF00[GWO]|r Your order for %s expired after %d minute%s", 
                             order.itemName or "item", ttlMinutes, ttlMinutes == 1 and "" or "s"))
-                    end
-                    
-                    -- Use UpdateOrderStatus to properly handle the expiry
-                    Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
-                    
-                    -- Order status is updated in single database with expiredAt timestamp
-                    
-                    expiredCount = expiredCount + 1
-                    
-                    -- Broadcast the expiration
-                    if addon.Sync then
-                        addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.EXPIRED, order.version or 1)
                     end
                     
                     -- Notify me that my order expired
@@ -713,9 +705,19 @@ function Database.CleanupExpiredOrders()
                     print(string.format("|cffFFFF00[GWO]|r Your %s order for %s has expired after %s", 
                         order.type, order.itemName or "item", timeText))
                         
-                else
-                    -- Not my order - let heartbeat system handle the expiration update
-                    -- Don't delete locally, rely on sync from creator
+                end
+                
+                -- Process expiration for ALL orders (creator or not)
+                -- Use UpdateOrderStatus to properly handle the expiry
+                Database.UpdateOrderStatus(orderID, Database.STATUS.EXPIRED)
+                
+                -- Order status is updated in single database with expiredAt timestamp
+                
+                expiredCount = expiredCount + 1
+                
+                -- Broadcast the expiration (anyone can broadcast expired orders)
+                if addon.Sync then
+                    addon.Sync.BroadcastOrderUpdate(orderID, Database.STATUS.EXPIRED, order.version or 1)
                 end
             end
         end
