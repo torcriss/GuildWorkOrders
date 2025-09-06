@@ -199,9 +199,24 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v4.0.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.0.1** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v4.0.0)
+## Recent Updates (v4.0.1)
+
+### 🐛 Critical Bug Fixes
+- **Fixed Order Expiration for Offline Creators** - Non-creators can now expire orders from offline players
+- **Fixed Expired Order Relay** - Expired orders are now properly relayed by all guild members  
+- **Fixed PURGED Order Sync Loop** - Prevents infinite delete/re-sync cycles with timestamp checks
+- **Fixed PURGED Order Relay** - PURGED orders from all players are now relayed for proper network cleanup
+- **Fixed Initialization Crash** - Added nil checks for Config during startup to prevent crashes
+
+### ⚡ Enhanced Network Reliability
+- **Offline Creator Support** - Orders continue their lifecycle even when creator goes offline
+- **Improved PURGED Order Handling** - Better network-wide propagation of cleanup states
+- **Timestamp-Based Rejection** - PURGED orders older than 4 minutes are rejected to prevent re-sync
+- **Robust State Management** - All order states now transition properly regardless of creator status
+
+## Previous Updates (v4.0.0)
 
 ### 🚀 Six-State Order Lifecycle System
 - **Complete System Overhaul** - Revolutionary 6-state order management system
