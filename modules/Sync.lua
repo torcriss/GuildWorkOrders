@@ -277,7 +277,7 @@ end
 -- New orders are shared via heartbeat only - no immediate broadcast
 -- This function kept for API compatibility but does nothing
 function Sync.BroadcastNewOrder(order)
-    if Config.IsDebugMode() then
+    if Config and Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r New order will be shared via heartbeat: %s", order.id))
     end
 end
@@ -285,7 +285,7 @@ end
 -- Order updates are shared via heartbeat only - no immediate broadcast
 -- This function kept for API compatibility but does nothing
 function Sync.BroadcastOrderUpdate(orderID, status, version, completedBy)
-    if Config.IsDebugMode() then
+    if Config and Config.IsDebugMode() then
         print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Order update will be shared via heartbeat: %s -> %s", 
             orderID, status))
     end
