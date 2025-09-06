@@ -231,7 +231,8 @@ function Database.GetOrdersToHeartbeat()
                order.completedBy or -- ANY completed orders (relay mode)
                order.clearedBy or -- ANY cleared orders (relay mode) 
                order.status == Database.STATUS.CANCELLED or -- ANY cancelled orders (relay mode)
-               order.status == Database.STATUS.EXPIRED then -- ANY expired orders (relay mode)
+               order.status == Database.STATUS.EXPIRED or -- ANY expired orders (relay mode)
+               order.status == Database.STATUS.PURGED then -- ANY purged orders (relay mode)
                 shouldShare = true
             end
             
