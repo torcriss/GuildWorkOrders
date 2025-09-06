@@ -725,8 +725,9 @@ function Sync.HandleHeartbeat(parts, sender)
                 local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
                 local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
                 local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
+                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
                 
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled then
+                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
@@ -768,8 +769,9 @@ function Sync.HandleHeartbeat(parts, sender)
                 local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
                 local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
                 local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
+                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
                 
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled then
+                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
@@ -809,8 +811,9 @@ function Sync.HandleHeartbeat(parts, sender)
                 local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
                 local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
                 local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
+                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
                 
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled then
+                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
                     Sync.ProcessHeartbeatOrder(orderData, sender)
                 elseif Config.IsDebugMode() then
                     print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
