@@ -397,6 +397,20 @@ function Database.SyncOrder(orderData)
         return false
     end
     
+    -- Reject PURGED orders that should already be deleted (older than 4 minutes)
+    if orderData.status == Database.STATUS.PURGED and orderData.purgedAt then
+        local currentTime = GetCurrentTime()
+        local timeSincePurged = currentTime - orderData.purgedAt
+        
+        if timeSincePurged > Database.PURGE_TIMES.PURGE_BROADCAST then
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected expired PURGED order: %s (purged %d seconds ago)",
+                    orderData.id, math.floor(timeSincePurged)))
+            end
+            return false
+        end
+    end
+    
     if not GuildWorkOrdersDB.orders then
         GuildWorkOrdersDB.orders = {}
     end
