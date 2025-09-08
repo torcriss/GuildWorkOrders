@@ -525,6 +525,33 @@ function UI.CreateOrderRow(order, index)
         -- PENDING status removed from system
         elseif order.status == Database.STATUS.COMPLETED then
             statusText:SetText("|cff00ff00Completed|r")
+            
+            -- Add whisper button for completed orders in All Orders tab
+            local playerName = UnitName("player")
+            if (order.player == playerName or order.completedBy == playerName) and order.completedBy then
+                local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                whisperBtn:SetSize(60, 20)
+                whisperBtn:SetPoint("LEFT", 695, 0)  -- Position at action column
+                whisperBtn:SetText("Whisper")
+                
+                whisperBtn:SetScript("OnClick", function()
+                    UI.WhisperCompletedOrder(order)
+                end)
+                
+                -- Add tooltip
+                whisperBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
+                    local targetName = (order.player == playerName) and order.completedBy or order.player
+                    if targetName then
+                        GameTooltip:AddLine("Will whisper: " .. targetName, 0.8, 0.8, 0.8)
+                    end
+                    GameTooltip:Show()
+                end)
+                whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
+                
+                row.whisperButton = whisperBtn
+            end
         elseif order.status == Database.STATUS.CANCELLED then
             statusText:SetText("|cffff0000Cancelled|r")
         elseif order.status == Database.STATUS.CLEARED then
