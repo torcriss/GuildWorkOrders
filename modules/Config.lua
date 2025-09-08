@@ -169,11 +169,14 @@ function Config.FormatCompletedWhisperMessage(itemName, quantity, price)
     
     -- Build details string based on available info
     local details = ""
-    if quantity and price then
+    local hasValidQuantity = quantity and quantity > 0
+    local hasValidPrice = price and price ~= "" and price ~= "?"
+    
+    if hasValidQuantity and hasValidPrice then
         details = string.format(" (x%s for %s)", tostring(quantity), price)
-    elseif quantity then
+    elseif hasValidQuantity then
         details = string.format(" (x%s)", tostring(quantity))
-    elseif price then
+    elseif hasValidPrice then
         details = string.format(" (for %s)", price)
     end
     
