@@ -116,12 +116,12 @@ function Config.UpdateDatabase()
         GuildWorkOrdersDB.syncData.heartbeatIndex = 1
     end
     
-    -- Config migration: Update orderExpiry from 24 hours to 1 minute (TESTING)
-    if GuildWorkOrdersDB.config and (GuildWorkOrdersDB.config.orderExpiry == 86400 or GuildWorkOrdersDB.config.orderExpiry == 1800 or GuildWorkOrdersDB.config.orderExpiry == 180) then
-        GuildWorkOrdersDB.config.orderExpiry = 60
-        config.orderExpiry = 60  -- Update in-memory config too
+    -- Config migration: Update orderExpiry from 12 hours to 2 minutes
+    if GuildWorkOrdersDB.config and (GuildWorkOrdersDB.config.orderExpiry == 43200 or GuildWorkOrdersDB.config.orderExpiry == 86400 or GuildWorkOrdersDB.config.orderExpiry == 1800 or GuildWorkOrdersDB.config.orderExpiry == 180) then
+        GuildWorkOrdersDB.config.orderExpiry = 120
+        config.orderExpiry = 120  -- Update in-memory config too
         if config.debugMode then
-            print("|cff00ff00[GuildWorkOrders Debug]|r Updated order expiry time to 1 minute for testing")
+            print("|cff00ff00[GuildWorkOrders Debug]|r Updated order expiry time to 2 minutes")
         end
     end
     
