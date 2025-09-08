@@ -9,8 +9,8 @@ addon = addon or {}
 -- No need to import here since modules will set addon.ModuleName directly
 
 -- Version info
-addon.version = "4.1.0"
-addon.build = "Whisper Integration & Six-State Lifecycle"
+addon.version = "4.2.0"
+addon.build = "Production Ready & Realistic Timings"
 
 -- Core initialization
 local function Initialize()

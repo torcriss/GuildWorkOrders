@@ -200,9 +200,18 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v4.1.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.2.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v4.1.0)
+## Recent Updates (v4.2.0)
+
+### ⚙️ Production-Ready Configuration
+- **30-Second Heartbeat System** - Reduced network traffic from 3-second to 30-second intervals
+- **12-Hour Order Lifecycle** - Orders now expire after 12 hours instead of 1 minute for realistic trading
+- **Extended Cleanup Cycles** - Non-active orders transition to PURGED after 18 hours (was 2 minutes)
+- **24-Hour Broadcast Window** - PURGED orders broadcast for 24 hours before deletion (was 4 minutes)
+- **Optimized for Guild Use** - All timing settings adjusted from rapid testing to production-ready values
+
+## Previous Updates (v4.1.0)
 
 ### 💬 New Whisper Integration
 - **Whisper Button for Completed Orders** - One-click whisper button appears for completed orders
