@@ -15,6 +15,7 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 - 📢 **Optional Announcements** - Can announce new orders to guild chat if desired
 - 🔧 **Automatic Cleanup** - Smart cleanup system prevents database bloat
 - 📊 **Status Indicators** - Real-time display of your orders and database usage
+- 💬 **Whisper Integration** - One-click whisper button for completed orders between buyers and sellers
 
 ## Installation
 
@@ -199,9 +200,18 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v4.0.1** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.1.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v4.0.1)
+## Recent Updates (v4.1.0)
+
+### 💬 New Whisper Integration
+- **Whisper Button for Completed Orders** - One-click whisper button appears for completed orders
+- **Smart Message Formatting** - Clean whisper messages with item name, quantity, and price details
+- **Bidirectional Communication** - Both buyers and sellers can whisper each other about completed trades
+- **Graceful Fallbacks** - Handles missing quantity or price information elegantly
+- **All Tabs Support** - Whisper button available in All Orders, My Orders, and filtered tabs
+
+## Previous Updates (v4.0.1)
 
 ### 🐛 Critical Bug Fixes
 - **Fixed Order Expiration for Offline Creators** - Non-creators can now expire orders from offline players
