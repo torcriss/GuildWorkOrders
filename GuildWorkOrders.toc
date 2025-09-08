@@ -2,7 +2,7 @@
 ## Title: Guild Work Orders
 ## Notes: Streamlined guild-wide work order system with automatic cleanup
 ## Author: Enhanced for Classic Era
-## Version: 4.2.0
+## Version: 4.3.0
 ## SavedVariables: GuildWorkOrdersDB
 
 modules\Config.lua
