@@ -1,6 +1,6 @@
 -- GuildWorkOrders Addon for WoW Classic Era (Interface 11507)
 -- Guild-wide work order management system with hidden synchronization
--- Version 4.3.0
+-- Version 4.4.0
 
 local addonName, addon = ...
 addon = addon or {}
