@@ -31,8 +31,8 @@ Database.TYPE = {
 
 -- Purge time constants (in seconds)
 Database.PURGE_TIMES = {
-    NON_ACTIVE = 120,       -- 2 minutes for all non-active orders (cancelled, expired, cleared, completed)
-    PURGE_BROADCAST = 240   -- 4 minutes broadcast time for PURGED orders (2x purge time)
+    NON_ACTIVE = 64800,     -- 18 hours for all non-active orders (cancelled, expired, cleared, completed)
+    PURGE_BROADCAST = 86400 -- 24 hours broadcast time for PURGED orders
 }
 
 function Database.Initialize()

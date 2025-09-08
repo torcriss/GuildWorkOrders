@@ -11,7 +11,7 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 - ⚡ **Real-time Updates** - Orders update instantly across all users with heartbeat system
 - 🛡️ **Six-State Lifecycle** - Robust order management with proper state transitions
 - 🔐 **Admin Clear System** - Password-protected guild-wide order clearing with full tracking
-- ⏰ **1-Minute Order Lifecycle** - Orders automatically expire after 1 minute for rapid turnover
+- ⏰ **12-Hour Order Lifecycle** - Orders automatically expire after 12 hours for realistic trading
 - 📢 **Optional Announcements** - Can announce new orders to guild chat if desired
 - 🔧 **Automatic Cleanup** - Smart cleanup system prevents database bloat
 - 📊 **Status Indicators** - Real-time display of your orders and database usage
@@ -89,15 +89,15 @@ GuildWorkOrders uses a sophisticated 6-state system for order management:
 6. **PURGED** - Internal cleanup state before permanent deletion
 
 **State Transitions:**
-- Active orders automatically expire after 1 minute
-- Non-active orders (expired/cancelled/completed/cleared) transition to PURGED after 2 minutes
-- PURGED orders are deleted after broadcasting for 4 minutes total
+- Active orders automatically expire after 12 hours
+- Non-active orders (expired/cancelled/completed/cleared) transition to PURGED after 18 hours
+- PURGED orders are deleted after broadcasting for 24 hours total
 - All state changes sync instantly across all guild members
 
 ### Synchronization
 - Orders are synchronized between guild members using hidden addon messages
 - No guild chat spam - all communication is invisible to non-addon users
-- **3-Second Heartbeat System** - Continuous rotating broadcasts ensure all users stay synchronized
+- **30-Second Heartbeat System** - Continuous rotating broadcasts ensure all users stay synchronized
 - **Instant New Order Sync** - New orders broadcast immediately to all users
 - **Advanced State Management** - Proper handling of all 6 order states with timestamps
 - **Network Reliability** - Two-stage deletion with PURGED state prevents data loss
@@ -223,7 +223,7 @@ MIT License - see LICENSE file for details
 ### ⚡ Enhanced Network Reliability
 - **Offline Creator Support** - Orders continue their lifecycle even when creator goes offline
 - **Improved PURGED Order Handling** - Better network-wide propagation of cleanup states
-- **Timestamp-Based Rejection** - PURGED orders older than 4 minutes are rejected to prevent re-sync
+- **Timestamp-Based Rejection** - PURGED orders older than 24 hours are rejected to prevent re-sync
 - **Robust State Management** - All order states now transition properly regardless of creator status
 
 ## Previous Updates (v4.0.0)
@@ -231,14 +231,14 @@ MIT License - see LICENSE file for details
 ### 🚀 Six-State Order Lifecycle System
 - **Complete System Overhaul** - Revolutionary 6-state order management system
 - **ACTIVE → EXPIRED/CANCELLED/COMPLETED/CLEARED → PURGED → Deleted** - Proper state transitions
-- **1-Minute Order Lifecycle** - Orders expire after 1 minute for rapid turnover
+- **12-Hour Order Lifecycle** - Orders expire after 12 hours for realistic trading
 - **Two-Stage Deletion** - PURGED state ensures network-wide order removal reliability
-- **Heartbeat-Only Synchronization** - Continuous 3-second rotating broadcasts eliminate sync gaps
+- **Heartbeat-Only Synchronization** - Continuous 30-second rotating broadcasts eliminate sync gaps
 
 ### ⚡ Enhanced Network Protocol  
 - **19-Field Heartbeat Messages** - Complete order state with all timestamps
 - **Instant State Propagation** - All order changes sync immediately across guild members
-- **Network Reliability** - PURGED orders broadcast for 4 minutes total before deletion
+- **Network Reliability** - PURGED orders broadcast for 24 hours total before deletion
 - **Zero Data Loss** - Robust conflict resolution prevents order desynchronization
 - **Automatic Cleanup** - 30-second periodic cleanup timer maintains system health
 

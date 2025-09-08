@@ -11,7 +11,7 @@ local defaultConfig = {
     autoSync = true,              -- Auto-sync on login
     syncTimeout = 30,             -- Sync timeout in seconds
     -- REMOVED: maxHistory - using single database
-    orderExpiry = 60,             -- 1 minute in seconds (TESTING)
+    orderExpiry = 43200,          -- 12 hours in seconds (PRODUCTION)
     debugMode = false,            -- Debug output
     soundAlert = true,            -- Play sound on new orders
     whisperTemplate = "Is your %s still available? I'm interested in %s for %s.",  -- %s = item, quantity, price

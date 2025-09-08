@@ -927,8 +927,8 @@ function Sync.StartHeartbeat()
         heartbeatTimer:Cancel()
     end
     
-    -- Send heartbeat every 3 seconds (rotating through orders)
-    heartbeatTimer = C_Timer.NewTicker(3, function()
+    -- Send heartbeat every 30 seconds (rotating through orders)
+    heartbeatTimer = C_Timer.NewTicker(30, function()
         if Config.IsDebugMode() then
             print("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting next order in rotation...")
         end
