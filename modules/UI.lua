@@ -625,6 +625,29 @@ function UI.CreateOrderRow(order, index)
                 statusText:SetText("|cff00ccffPending|r")
             elseif order.status == Database.STATUS.COMPLETED then
                 statusText:SetText("|cff00ff00Completed|r")
+                
+                -- Add whisper button for completed orders in My Orders tab (only if there's a completedBy)
+                if order.completedBy then
+                    local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                    whisperBtn:SetSize(60, 20)
+                    whisperBtn:SetPoint("LEFT", statusText, "RIGHT", 10, 0)
+                    whisperBtn:SetText("Whisper")
+                    
+                    whisperBtn:SetScript("OnClick", function()
+                        UI.WhisperCompletedOrder(order)
+                    end)
+                    
+                    -- Add tooltip
+                    whisperBtn:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
+                        GameTooltip:AddLine("Will whisper: " .. order.completedBy, 0.8, 0.8, 0.8)
+                        GameTooltip:Show()
+                    end)
+                    whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
+                    
+                    row.whisperButton = whisperBtn
+                end
             elseif order.status == Database.STATUS.CANCELLED then
                 statusText:SetText("|cffff8080Cancelled|r")
             elseif order.status == Database.STATUS.CLEARED then
@@ -1078,6 +1101,40 @@ function UI.WhisperPlayer(order)
     SendChatMessage(message, "WHISPER", nil, order.player)
     print(string.format("|cff00ff00[GWO]|r Whispered %s about %s",
         order.player, order.itemName))
+end
+
+-- Send whisper about completed order
+function UI.WhisperCompletedOrder(order)
+    local playerName = UnitName("player")
+    local targetPlayer = nil
+    
+    -- Determine who to whisper based on who the current player is
+    if order.player == playerName then
+        -- I'm the order creator, whisper the completer
+        targetPlayer = order.completedBy
+    elseif order.completedBy == playerName then
+        -- I'm the completer, whisper the order creator
+        targetPlayer = order.player
+    else
+        -- Neither creator nor completer - shouldn't happen, but handle gracefully
+        print("|cffFF6B6B[GWO]|r You weren't involved in this order.")
+        return
+    end
+    
+    if not targetPlayer then
+        print("|cffFF6B6B[GWO]|r Unable to determine who to whisper about this order.")
+        return
+    end
+    
+    local message = Config.FormatCompletedWhisperMessage(
+        order.itemName,
+        order.quantity,
+        order.price
+    )
+    
+    SendChatMessage(message, "WHISPER", nil, targetPlayer)
+    print(string.format("|cff00ff00[GWO]|r Whispered %s about completed %s order",
+        targetPlayer, order.itemName))
 end
 
 -- Save window position
@@ -1636,9 +1693,43 @@ function UI.UpdateOrderRowButton(row, order)
         end
     -- PENDING status removed from system
     elseif order.status == Database.STATUS.COMPLETED then
-        row.actionButton:SetText("Completed")
-        row.actionButton:SetEnabled(false)
-        row.actionButton:Show()
+        -- Change completed orders to show status text + whisper button
+        row.actionButton:Hide()
+        
+        -- Create status text for completed orders
+        local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        statusText:SetPoint("LEFT", 610, 0)
+        statusText:SetWidth(70)
+        statusText:SetJustifyH("LEFT")
+        statusText:SetText("|cff00ff00Completed|r")
+        row.statusText = statusText
+        
+        -- Add whisper button for completed orders (only if player was involved)
+        local playerName = UnitName("player")
+        if (order.player == playerName or order.completedBy == playerName) and order.completedBy then
+            local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            whisperBtn:SetSize(60, 20)
+            whisperBtn:SetPoint("LEFT", statusText, "RIGHT", 10, 0)
+            whisperBtn:SetText("Whisper")
+            
+            whisperBtn:SetScript("OnClick", function()
+                UI.WhisperCompletedOrder(order)
+            end)
+            
+            -- Add tooltip
+            whisperBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
+                local targetName = (order.player == playerName) and order.completedBy or order.player
+                if targetName then
+                    GameTooltip:AddLine("Will whisper: " .. targetName, 0.8, 0.8, 0.8)
+                end
+                GameTooltip:Show()
+            end)
+            whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
+            
+            row.whisperButton = whisperBtn
+        end
     else
         row.actionButton:Hide()
     end

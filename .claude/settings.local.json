@@ -10,7 +10,11 @@
       "Bash(grep:*)",
       "Bash(findstr:*)",
       "Bash(./deploy.sh)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh release:*)",
+      "Read(//c/**)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

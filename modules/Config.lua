@@ -15,6 +15,7 @@ local defaultConfig = {
     debugMode = false,            -- Debug output
     soundAlert = true,            -- Play sound on new orders
     whisperTemplate = "Is your %s still available? I'm interested in %s for %s.",  -- %s = item, quantity, price
+    completedWhisperTemplate = "Hi! About the completed %s order%s.",  -- %s = item, details (quantity/price)
     
     -- UI settings
     windowWidth = 700,
@@ -161,6 +162,22 @@ function Config.FormatWhisperMessage(itemName, quantity, price)
     local priceText = price or "the price you mentioned"
     
     return string.format(template, itemName, quantityText, priceText)
+end
+
+function Config.FormatCompletedWhisperMessage(itemName, quantity, price)
+    local template = config.completedWhisperTemplate or defaultConfig.completedWhisperTemplate
+    
+    -- Build details string based on available info
+    local details = ""
+    if quantity and price then
+        details = string.format(" (x%s for %s)", tostring(quantity), price)
+    elseif quantity then
+        details = string.format(" (x%s)", tostring(quantity))
+    elseif price then
+        details = string.format(" (for %s)", price)
+    end
+    
+    return string.format(template, itemName, details)
 end
 
 function Config.IsDebugMode()
