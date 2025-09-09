@@ -226,13 +226,10 @@ function Database.GetOrdersToHeartbeat()
                 shouldShare = true
             end
             
-            -- Share orders I completed or ANY non-active orders for relay
+            -- Share ALL orders for relay (full relay mode)
+            -- This includes active orders from other players to ensure network resilience
             if order.completedBy == playerName or -- Orders I completed
-               order.completedBy or -- ANY completed orders (relay mode)
-               order.clearedBy or -- ANY cleared orders (relay mode) 
-               order.status == Database.STATUS.CANCELLED or -- ANY cancelled orders (relay mode)
-               order.status == Database.STATUS.EXPIRED or -- ANY expired orders (relay mode)
-               order.status == Database.STATUS.PURGED then -- ANY purged orders (relay mode)
+               true then -- ALL orders (full relay mode for network resilience)
                 shouldShare = true
             end
             
@@ -428,6 +425,29 @@ function Database.SyncOrder(orderData)
             return false
         elseif newVersion == existingVersion and (existingOrder.timestamp or 0) >= (orderData.timestamp or 0) then
             -- Same version but not newer, ignore
+            return false
+        end
+        
+        -- Status regression prevention: Prevent any backward status transitions
+        local statusPriority = {
+            [Database.STATUS.ACTIVE] = 1,
+            [Database.STATUS.PENDING] = 1,  -- Same level as ACTIVE for fulfillment workflow
+            [Database.STATUS.CANCELLED] = 2,
+            [Database.STATUS.EXPIRED] = 2,
+            [Database.STATUS.COMPLETED] = 2,
+            [Database.STATUS.CLEARED] = 3,
+            [Database.STATUS.PURGED] = 4
+        }
+        
+        local existingPriority = statusPriority[existingOrder.status] or 1
+        local incomingPriority = statusPriority[orderData.status] or 1
+        
+        -- Reject if incoming status has lower priority (backward transition)
+        if incomingPriority < existingPriority then
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting status regression in SyncOrder: %s -> %s for order %s", 
+                    existingOrder.status, orderData.status, orderData.id))
+            end
             return false
         end
     end

@@ -718,21 +718,9 @@ function Sync.HandleHeartbeat(parts, sender)
                 if orderData.clearedAt == 0 then orderData.clearedAt = nil end
                 if orderData.purgedAt == 0 then orderData.purgedAt = nil end
                 
-                -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
-                -- Handle both with and without realm suffix in sender name
-                local baseSenderName = strsplit("-", sender)
-                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
-                local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
-                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
-                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
-                
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
-                    Sync.ProcessHeartbeatOrder(orderData, sender)
-                elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
-                        sender, orderData.player))
-                end
+                -- Accept ALL heartbeats for full relay mode (network resilience)
+                -- Status regression prevention handled in ProcessHeartbeatOrder
+                Sync.ProcessHeartbeatOrder(orderData, sender)
             elseif #orderParts >= 14 then
                 -- Parse compressed heartbeat format with clearedBy field (backward compatibility)
                 local timeAgo = tonumber(orderParts[7]) or 0
@@ -762,21 +750,9 @@ function Sync.HandleHeartbeat(parts, sender)
                     clearedBy = clearedBy ~= "" and clearedBy or nil
                 }
                 
-                -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
-                -- Handle both with and without realm suffix in sender name
-                local baseSenderName = strsplit("-", sender)
-                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
-                local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
-                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
-                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
-                
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
-                    Sync.ProcessHeartbeatOrder(orderData, sender)
-                elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
-                        sender, orderData.player))
-                end
+                -- Accept ALL heartbeats for full relay mode (network resilience)
+                -- Status regression prevention handled in ProcessHeartbeatOrder
+                Sync.ProcessHeartbeatOrder(orderData, sender)
             elseif #orderParts >= 13 then
                 -- Parse legacy format without clearedBy field
                 local timeAgo = tonumber(orderParts[7]) or 0
@@ -804,21 +780,9 @@ function Sync.HandleHeartbeat(parts, sender)
                     fulfilledBy = fulfilledBy ~= "" and fulfilledBy or nil
                 }
                 
-                -- Accept heartbeat from creator OR anyone if order has completion fields (relay mode)
-                -- Handle both with and without realm suffix in sender name
-                local baseSenderName = strsplit("-", sender)
-                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local hasCompletedBy = (orderData.completedBy and orderData.completedBy ~= "")
-                local hasClearedBy = (orderData.clearedBy and orderData.clearedBy ~= "")
-                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
-                local isExpired = (orderData.status == Database.STATUS.EXPIRED)
-                
-                if isCreator or hasCompletedBy or hasClearedBy or isCancelled or isExpired then
-                    Sync.ProcessHeartbeatOrder(orderData, sender)
-                elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected heartbeat: sender (%s) not creator (%s) and no completion fields", 
-                        sender, orderData.player))
-                end
+                -- Accept ALL heartbeats for full relay mode (network resilience)
+                -- Status regression prevention handled in ProcessHeartbeatOrder
+                Sync.ProcessHeartbeatOrder(orderData, sender)
             elseif #orderParts >= 12 then
                 -- Handle legacy format for backward compatibility
                 local orderData = {
@@ -836,19 +800,9 @@ function Sync.HandleHeartbeat(parts, sender)
                     pendingTimestamp = tonumber(orderParts[12]) or 0
                 }
                 
-                -- Accept heartbeat from creator OR for cancelled orders (legacy format)
-                -- Handle both with and without realm suffix in sender name
-                local baseSenderName = strsplit("-", sender)
-                local isCreator = (orderData.player == sender or orderData.player == baseSenderName)
-                local isCancelled = (orderData.status == Database.STATUS.CANCELLED)
-                -- Note: Legacy format doesn't have fulfilledBy/clearedBy fields
-                
-                if isCreator or isCancelled then
-                    Sync.ProcessHeartbeatOrder(orderData, sender)
-                elseif Config.IsDebugMode() then
-                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejected legacy heartbeat: sender (%s) not creator (%s) and not cancelled", 
-                        orderData.player, sender))
-                end
+                -- Accept ALL heartbeats for full relay mode (network resilience) - legacy format
+                -- Status regression prevention handled in ProcessHeartbeatOrder
+                Sync.ProcessHeartbeatOrder(orderData, sender)
             end
         end
     end
@@ -900,14 +854,31 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         return
     end
     
-    -- Additional protection: Don't allow completed orders to be overwritten by active ones
+    -- Status regression prevention: Prevent any backward status transitions
     local existingOrder = GuildWorkOrdersDB.orders and GuildWorkOrdersDB.orders[orderData.id]
-    if existingOrder and existingOrder.completedBy and not orderData.completedBy then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting heartbeat: trying to overwrite completed order %s with active status", 
-                orderData.id))
+    if existingOrder then
+        -- Define status hierarchy (higher number = more final status)
+        local statusPriority = {
+            [Database.STATUS.ACTIVE] = 1,
+            [Database.STATUS.PENDING] = 1,  -- Same level as ACTIVE for fulfillment workflow
+            [Database.STATUS.CANCELLED] = 2,
+            [Database.STATUS.EXPIRED] = 2,
+            [Database.STATUS.COMPLETED] = 2,
+            [Database.STATUS.CLEARED] = 3,
+            [Database.STATUS.PURGED] = 4
+        }
+        
+        local existingPriority = statusPriority[existingOrder.status] or 1
+        local incomingPriority = statusPriority[orderData.status] or 1
+        
+        -- Reject if incoming status has lower priority (backward transition)
+        if incomingPriority < existingPriority then
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting status regression: %s -> %s for order %s", 
+                    existingOrder.status, orderData.status, orderData.id))
+            end
+            return
         end
-        return
     end
     
     -- Sync all orders (SyncOrder handles version checking and routing to appropriate storage)
