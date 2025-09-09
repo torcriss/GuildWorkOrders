@@ -423,10 +423,11 @@ function Database.SyncOrder(orderData)
         if newVersion < existingVersion then
             -- Incoming data is older, ignore
             return false
-        elseif newVersion == existingVersion and (existingOrder.timestamp or 0) >= (orderData.timestamp or 0) then
-            -- Same version but not newer, ignore
+        elseif newVersion == existingVersion then
+            -- Same version, no update needed
             return false
         end
+        -- newVersion > existingVersion, continue to accept the update
         
         -- Status regression prevention: Prevent any backward status transitions
         local statusPriority = {
