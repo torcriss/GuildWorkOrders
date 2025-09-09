@@ -200,9 +200,28 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v4.2.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.5.0** - Making guild trading easier, one order at a time! 🛒
 
-## Recent Updates (v4.2.0)
+## Recent Updates (v4.5.0)
+
+### 🛡️ Enhanced Admin Clear System
+- **Heartbeat-Based Admin Clear** - Admin clear now uses the heartbeat relay system instead of immediate broadcast
+- **Network Resilient** - Orders marked as CLEARED propagate through heartbeat system even when admin goes offline
+- **Better Synchronization** - All players receive cleared orders through the established heartbeat relay network
+- **Removed Legacy Broadcast** - Eliminated immediate CLEAR_ALL message type for cleaner architecture
+
+### 🔧 Improved Conflict Resolution
+- **Status Priority System** - When versions are equal, higher priority status wins (CLEARED=3, COMPLETED=3, CANCELLED/EXPIRED=2, ACTIVE=1, PURGED=4)
+- **Version Conflict Fix** - Resolved issues where same version orders with different statuses caused conflicts
+- **Enhanced Debug Logging** - Added comprehensive debug messages for troubleshooting sync issues
+- **Cleaner Message Handling** - Removed unused CLEAR_ALL message handlers and functions
+
+### 🐛 Bug Fixes
+- **Fixed Syntax Error** - Resolved Lua syntax error in admin clear confirmation dialog
+- **Cleaned Up Code** - Removed obsolete BroadcastClearAll and HandleClearAll functions
+- **Improved Status Transitions** - Better handling of status changes through heartbeat system
+
+## Previous Updates (v4.2.0)
 
 ### ⚙️ Production-Ready Configuration
 - **30-Second Heartbeat System** - Reduced network traffic from 3-second to 30-second intervals
