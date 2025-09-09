@@ -601,8 +601,9 @@ function Sync.SendHeartbeat()
     local orderToSend = ordersToSend[heartbeatIndex]
     if Config.IsDebugMode() then
         local statusDesc = orderToSend.status == Database.STATUS.ACTIVE and "active" or "non-active"
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting heartbeat: order %s v%d (%s) [%d/%d]", 
-            orderToSend.id, orderToSend.version or 1, orderToSend.status, heartbeatIndex, #ordersToSend))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting heartbeat: order %s v%d (%s) - %s [%d/%d]", 
+            orderToSend.id, orderToSend.version or 1, orderToSend.status, 
+            orderToSend.itemName or "Unknown Item", heartbeatIndex, #ordersToSend))
     end
     
     -- Move to next order for next heartbeat
