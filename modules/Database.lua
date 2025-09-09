@@ -457,8 +457,8 @@ function Database.SyncOrder(orderData)
         -- Reject if incoming status has lower priority (backward transition)
         if incomingPriority < existingPriority then
             if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting status regression in SyncOrder: %s -> %s for order %s", 
-                    existingOrder.status, orderData.status, orderData.id))
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting status regression in SyncOrder: %s -> %s for order %s (%s)", 
+                    existingOrder.status, orderData.status, orderData.id, orderData.itemName or "Unknown Item"))
             end
             return false
         end
