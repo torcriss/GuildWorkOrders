@@ -428,17 +428,39 @@ function Database.SyncOrder(orderData)
             end
             return false
         elseif newVersion == existingVersion then
-            -- Same version, no update needed
-            if Config.IsDebugMode() then
-                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting same version: order %s v%d", 
-                    orderData.id, newVersion))
+            -- Same version - check if incoming has higher status priority
+            local statusPriority = {
+                [Database.STATUS.ACTIVE] = 1,
+                [Database.STATUS.CANCELLED] = 2,
+                [Database.STATUS.EXPIRED] = 2,
+                [Database.STATUS.CLEARED] = 2,
+                [Database.STATUS.COMPLETED] = 3,
+                [Database.STATUS.PURGED] = 4
+            }
+            
+            local existingPriority = statusPriority[existingOrder.status] or 1
+            local incomingPriority = statusPriority[orderData.status] or 1
+            
+            if incomingPriority > existingPriority then
+                -- Accept higher priority status for same version
+                if Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Accepting same version with higher priority: order %s v%d (%s -> %s)", 
+                        orderData.id, newVersion, existingOrder.status, orderData.status))
+                end
+            else
+                -- Reject same version with equal or lower priority
+                if Config.IsDebugMode() then
+                    print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting same version: order %s v%d (%s vs %s)", 
+                        orderData.id, newVersion, existingOrder.status, orderData.status))
+                end
+                return false
             end
-            return false
-        end
-        -- newVersion > existingVersion, continue to accept the update
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Accepting version update: order %s v%d -> v%d (%s -> %s)", 
-                orderData.id, existingVersion, newVersion, existingOrder.status, orderData.status))
+        else
+            -- newVersion > existingVersion, continue to accept the update
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Accepting version update: order %s v%d -> v%d (%s -> %s)", 
+                    orderData.id, existingVersion, newVersion, existingOrder.status, orderData.status))
+            end
         end
         
         -- Status regression prevention: Prevent any backward status transitions
