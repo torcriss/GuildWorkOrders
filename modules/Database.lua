@@ -557,59 +557,32 @@ end
 -- REMOVED: ClearHistory - using single database
 
 -- Broadcast cancellation of all orders to all users (admin function)
-function Database.BroadcastClearAll(callback)
+
+-- Set all orders to CLEARED status (admin function using heartbeat relay)
+function Database.SetAllOrdersCleared()
     if not GuildWorkOrdersDB or not GuildWorkOrdersDB.orders then
-        if callback then callback() end
-        return true
+        return 0
     end
     
-    local orders = {}
+    local clearedBy = UnitName("player")
+    local clearTime = GetCurrentTime()
+    local clearedCount = 0
+    
     for orderID, order in pairs(GuildWorkOrdersDB.orders) do
-        table.insert(orders, {id = orderID, version = (order.version or 1) + 1})
-    end
-    
-    local totalOrders = #orders
-    if totalOrders == 0 then
-        print("|cff00ff00[GWO]|r No active orders to cancel")
-        if callback then callback() end
-        return true
-    end
-    
-    print(string.format("|cffFFAA00[GWO]|r Broadcasting cancellation of %d orders to all users...", totalOrders))
-    
-    -- Broadcast cancellations with rate limiting (5 per second to avoid spam)
-    local currentIndex = 1
-    local broadcastTimer
-    
-    local function broadcastNext()
-        if currentIndex <= totalOrders then
-            local order = orders[currentIndex]
-            
-            -- Broadcast cancellation
-            if addon.Sync then
-                addon.Sync.BroadcastOrderUpdate(order.id, Database.STATUS.CANCELLED, order.version, "Admin Clear")
-            end
-            
-            -- Update progress every 10 orders
-            if currentIndex % 10 == 0 or currentIndex == totalOrders then
-                print(string.format("|cffFFAA00[GWO]|r Cancelled %d/%d orders...", currentIndex, totalOrders))
-            end
-            
-            currentIndex = currentIndex + 1
-        else
-            -- All orders broadcast, cleanup and callback
-            if broadcastTimer then
-                broadcastTimer:Cancel()
-            end
-            print("|cff00ff00[GWO]|r All order cancellations broadcast successfully")
-            if callback then callback() end
+        if order.status ~= Database.STATUS.PURGED and order.status ~= Database.STATUS.CLEARED then
+            order.status = Database.STATUS.CLEARED
+            order.clearedBy = clearedBy
+            order.clearedAt = clearTime
+            order.version = (order.version or 1) + 1
+            clearedCount = clearedCount + 1
         end
     end
     
-    -- Start broadcasting with 200ms delay between each (5 per second)
-    broadcastTimer = C_Timer.NewTicker(0.2, broadcastNext)
+    if Config.IsDebugMode() then
+        print(string.format("|cffAAAAFF[GWO Debug]|r Set %d orders to CLEARED status (will relay via heartbeat)", clearedCount))
+    end
     
-    return true
+    return clearedCount
 end
 
 -- Clear all database data (orders only, keep config)

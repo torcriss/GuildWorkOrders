@@ -1682,21 +1682,22 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
     button1 = "YES, CLEAR ALL",
     button2 = "Cancel",
     OnAccept = function()
-        if addon.Sync and addon.Sync.BroadcastClearAll then
-            print("|cffFFAA00[GWO]|r Initiating admin clear...")
-            addon.Sync.BroadcastClearAll(function()
-                -- After clear all is broadcast, clear local database
-                Database.ClearAllData()
-                print("|cff00ff00[GWO]|r Admin clear completed! All orders cleared globally.")
-                
-                -- Refresh UI if open
-                if mainFrame and mainFrame:IsShown() then
-                    UI.RefreshOrders()
-                    UI.UpdateStatusBar()
-                end
-            end)
+        print("|cffFFAA00[GWO]|r Initiating admin clear...")
+        
+        -- Use heartbeat relay system to clear all orders
+        local clearedCount = Database.SetAllOrdersCleared()
+        
+        if clearedCount > 0 then
+            print("|cff00ff00[GWO]|r Admin clear initiated! " .. clearedCount .. " orders marked as CLEARED and will propagate via heartbeat relay.")
         else
-            print("|cffff0000[GWO]|r Error: Sync module not available")
+            print("|cffFFAA00[GWO]|r No active orders found to clear.")
+        end
+        
+        -- Refresh UI if open
+        if mainFrame and mainFrame:IsShown() then
+            UI.RefreshOrders()
+            UI.UpdateStatusBar()
+        end
         end
     end,
     timeout = 0,

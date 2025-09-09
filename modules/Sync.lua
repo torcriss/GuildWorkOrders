@@ -30,7 +30,6 @@ local MSG_TYPE = {
     FULFILL_ACCEPT = "FULFILL_ACC",   -- Creator accepts fulfillment
     FULFILL_REJECT = "FULFILL_REJ",   -- Creator rejects fulfillment  
     HEARTBEAT = "HEARTBEAT",          -- Periodic broadcast of creator's orders
-    CLEAR_ALL = "CLEAR_ALL",          -- Admin clear all orders command
     CLEAR_SINGLE = "CLEAR_SINGLE"     -- Admin clear single order command
 }
 
@@ -168,14 +167,14 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= ADDON_PREFIX then return end
     
     -- Ignore own messages - handle both with and without realm suffix
-    -- Exception: Allow own CLEAR_SINGLE and CLEAR_ALL messages to process locally
+    -- Exception: Allow own CLEAR_SINGLE messages to process locally
     local playerName = UnitName("player")
     local playerWithRealm = playerName .. "-" .. GetRealmName()
     local isOwnMessage = (sender == playerName or sender == playerWithRealm)
     
     local parts = {strsplit("|", message)}
     local msgType = parts[1]
-    local isAdminClearMessage = (msgType == MSG_TYPE.CLEAR_SINGLE or msgType == MSG_TYPE.CLEAR_ALL)
+    local isAdminClearMessage = (msgType == MSG_TYPE.CLEAR_SINGLE)
     
     if isOwnMessage and not isAdminClearMessage then 
         return 
@@ -206,8 +205,6 @@ function Sync.OnAddonMessage(prefix, message, channel, sender)
         Sync.HandleFulfillReject(parts, sender)
     elseif msgType == MSG_TYPE.HEARTBEAT then
         Sync.HandleHeartbeat(parts, sender)
-    elseif msgType == MSG_TYPE.CLEAR_ALL then
-        Sync.HandleClearAll(parts, sender)
     elseif msgType == MSG_TYPE.CLEAR_SINGLE then
         Sync.HandleClearSingle(parts, sender)
     end
@@ -931,68 +928,6 @@ function Sync.StopHeartbeat()
     end
 end
 
--- Handle admin clear all command
-function Sync.HandleClearAll(parts, sender)
-    if #parts < 3 then return end
-    
-    local clearTimestamp = tonumber(parts[3])
-    local clearedBy = parts[4] or sender
-    if not clearTimestamp then return end
-    
-    local currentClearTimestamp = Database.GetGlobalClearTimestamp()
-    
-    -- Only process if this is a newer clear event
-    if clearTimestamp > currentClearTimestamp then
-        if Config.IsDebugMode() then
-            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received admin clear from %s (timestamp: %d)", clearedBy, clearTimestamp))
-        end
-        
-        -- Set the new clear timestamp with clearer's name
-        Database.SetGlobalClearTimestamp(clearTimestamp, clearedBy)
-        
-        -- Clear all orders from single database
-        if GuildWorkOrdersDB then
-            if GuildWorkOrdersDB.orders then
-                GuildWorkOrdersDB.orders = {}
-            end
-        end
-        
-        -- Refresh UI
-        if addon.UI and addon.UI.RefreshOrders then
-            addon.UI.RefreshOrders()
-            if addon.UI.UpdateStatusBar then
-                addon.UI.UpdateStatusBar()
-            end
-        end
-        
-        print("|cffFFAA00[GWO]|r All orders have been cleared by guild admin")
-    end
-end
-
--- Broadcast clear all command to guild
-function Sync.BroadcastClearAll(callback)
-    local clearTimestamp = GetCurrentTime()
-    local clearedBy = UnitName("player")
-    Database.SetGlobalClearTimestamp(clearTimestamp, clearedBy)
-    
-    local message = string.format("%s|%d|%d|%s",
-        MSG_TYPE.CLEAR_ALL,
-        PROTOCOL_VERSION,
-        clearTimestamp,
-        clearedBy
-    )
-    
-    Sync.QueueMessage(message)
-    
-    if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Broadcasting clear all (timestamp: %d, by: %s)", clearTimestamp, clearedBy))
-    end
-    
-    -- Call callback immediately for now - in a real implementation you might want to wait for confirmations
-    if callback then
-        callback()
-    end
-end
 
 -- Handle single order clear from another user
 function Sync.HandleClearSingle(parts, sender)
