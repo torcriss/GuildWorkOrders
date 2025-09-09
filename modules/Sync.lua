@@ -860,7 +860,6 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
         -- Define status hierarchy (higher number = more final status)
         local statusPriority = {
             [Database.STATUS.ACTIVE] = 1,
-            [Database.STATUS.PENDING] = 1,  -- Same level as ACTIVE for fulfillment workflow
             [Database.STATUS.CANCELLED] = 2,
             [Database.STATUS.EXPIRED] = 2,
             [Database.STATUS.COMPLETED] = 2,

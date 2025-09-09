@@ -444,7 +444,6 @@ function Database.SyncOrder(orderData)
         -- Status regression prevention: Prevent any backward status transitions
         local statusPriority = {
             [Database.STATUS.ACTIVE] = 1,
-            [Database.STATUS.PENDING] = 1,  -- Same level as ACTIVE for fulfillment workflow
             [Database.STATUS.CANCELLED] = 2,
             [Database.STATUS.EXPIRED] = 2,
             [Database.STATUS.COMPLETED] = 2,
