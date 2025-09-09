@@ -422,12 +422,24 @@ function Database.SyncOrder(orderData)
         
         if newVersion < existingVersion then
             -- Incoming data is older, ignore
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting older version: order %s v%d -> v%d", 
+                    orderData.id, newVersion, existingVersion))
+            end
             return false
         elseif newVersion == existingVersion then
             -- Same version, no update needed
+            if Config.IsDebugMode() then
+                print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Rejecting same version: order %s v%d", 
+                    orderData.id, newVersion))
+            end
             return false
         end
         -- newVersion > existingVersion, continue to accept the update
+        if Config.IsDebugMode() then
+            print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Accepting version update: order %s v%d -> v%d (%s -> %s)", 
+                orderData.id, existingVersion, newVersion, existingOrder.status, orderData.status))
+        end
         
         -- Status regression prevention: Prevent any backward status transitions
         local statusPriority = {
@@ -481,8 +493,8 @@ function Database.SyncOrder(orderData)
     GuildWorkOrdersDB.orders[orderData.id] = orderData
     
     if Config.IsDebugMode() then
-        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Received order update: %s from %s",
-            orderData.itemName or "Unknown Item", orderData.player))
+        print(string.format("|cff00ff00[GuildWorkOrders Debug]|r Successfully synced order: %s v%d (%s) from %s",
+            orderData.id, orderData.version or 1, orderData.status, orderData.player))
     end
     
     return true
