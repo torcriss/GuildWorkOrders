@@ -862,8 +862,8 @@ function Sync.ProcessHeartbeatOrder(orderData, sender)
             [Database.STATUS.ACTIVE] = 1,
             [Database.STATUS.CANCELLED] = 2,
             [Database.STATUS.EXPIRED] = 2,
-            [Database.STATUS.COMPLETED] = 2,
-            [Database.STATUS.CLEARED] = 3,
+            [Database.STATUS.CLEARED] = 2,
+            [Database.STATUS.COMPLETED] = 3,
             [Database.STATUS.PURGED] = 4
         }
         
