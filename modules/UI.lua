@@ -1698,7 +1698,6 @@ StaticPopupDialogs["GWO_ADMIN_CONFIRM"] = {
             UI.RefreshOrders()
             UI.UpdateStatusBar()
         end
-        end
     end,
     timeout = 0,
     whileDead = true,
