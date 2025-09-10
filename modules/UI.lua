@@ -569,7 +569,7 @@ function UI.CreateOrderRow(order, index)
             -- Action button for truly active (non-expired) orders only
             local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             actionBtn:SetSize(80, 20)
-            actionBtn:SetPoint("LEFT", 695, 0)
+            actionBtn:SetPoint("LEFT", 665, 0)  -- Moved left to make room for G button
             
             -- Store button reference in row for later updates
             row.actionButton = actionBtn
@@ -593,6 +593,32 @@ function UI.CreateOrderRow(order, index)
             -- Use the same button update logic as other tabs
             UI.UpdateOrderRowButton(row, order)
             
+        end
+        
+        -- Add G button for ACTIVE or EXPIRED orders (including those that are expired but not yet marked as EXPIRED)
+        local isExpired = order.expiresAt and order.expiresAt < GetCurrentTime()
+        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.EXPIRED or 
+           (order.status == Database.STATUS.ACTIVE and isExpired) then
+            local guildBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            guildBtn:SetSize(25, 20)
+            guildBtn:SetPoint("LEFT", 750, 0)  -- Positioned to the right of action button
+            guildBtn:SetText("G")
+            
+            -- Store reference for cleanup
+            row.guildButton = guildBtn
+            
+            guildBtn:SetScript("OnClick", function()
+                UI.AnnounceOrderToGuild(order)
+            end)
+            
+            -- Add tooltip
+            guildBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Announce to Guild Chat", 1, 1, 1)
+                GameTooltip:AddLine("Send WTB/WTS message to guild", 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            end)
+            guildBtn:SetScript("OnLeave", GameTooltip_Hide)
         end
         -- Completion timestamp removed - redundant with action button showing "Completed"
         
@@ -647,7 +673,7 @@ function UI.CreateOrderRow(order, index)
             -- Action button for active tabs
             local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             actionBtn:SetSize(80, 20)  -- Increased width for new button states
-            actionBtn:SetPoint("LEFT", 610, 0)
+            actionBtn:SetPoint("LEFT", 580, 0)  -- Moved left to make room for G button
             
             -- Store button reference in row for later updates
             row.actionButton = actionBtn
@@ -681,6 +707,32 @@ function UI.CreateOrderRow(order, index)
             
             -- Initialize button state using new system
             UI.UpdateOrderRowButton(row, order)
+            
+            -- Add G button for ACTIVE or EXPIRED orders (including those that are expired but not yet marked as EXPIRED)
+            local isExpired = order.expiresAt and order.expiresAt < GetCurrentTime()
+            if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.EXPIRED or 
+               (order.status == Database.STATUS.ACTIVE and isExpired) then
+                local guildBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                guildBtn:SetSize(25, 20)
+                guildBtn:SetPoint("LEFT", 665, 0)  -- Positioned to the right of action button
+                guildBtn:SetText("G")
+                
+                -- Store reference for cleanup
+                row.guildButton = guildBtn
+                
+                guildBtn:SetScript("OnClick", function()
+                    UI.AnnounceOrderToGuild(order)
+                end)
+                
+                -- Add tooltip
+                guildBtn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText("Announce to Guild Chat", 1, 1, 1)
+                    GameTooltip:AddLine("Send WTB/WTS message to guild", 0.8, 0.8, 0.8)
+                    GameTooltip:Show()
+                end)
+                guildBtn:SetScript("OnLeave", GameTooltip_Hide)
+            end
             
         end
     end
@@ -1500,6 +1552,33 @@ function UI.SetButtonTimeout(orderID, text)
             end
         end)
     end
+end
+
+-- Announce existing order to guild chat
+function UI.AnnounceOrderToGuild(order)
+    if not order then return end
+    
+    local itemText = order.itemLink or order.itemName or "Unknown Item"
+    local orderType = order.type == Database.TYPE.WTB and "WTB" or "WTS"
+    local message
+    
+    if order.price and order.price ~= "" and order.price ~= "?" then
+        message = string.format("%s %s%s for %s",
+            orderType,
+            order.quantity and (tostring(order.quantity) .. "x ") or "",
+            itemText,
+            order.price
+        )
+    else
+        message = string.format("%s %s%s",
+            orderType,
+            order.quantity and (tostring(order.quantity) .. "x ") or "",
+            itemText
+        )
+    end
+    
+    SendChatMessage(message, "GUILD")
+    print(string.format("|cff00ff00[GWO]|r Announced to guild: %s", message))
 end
 
 -- Handle fulfillment response from sync system
