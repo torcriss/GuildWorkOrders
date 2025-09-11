@@ -16,18 +16,15 @@ end
 
 -- UI State
 local mainFrame = nil
-local currentTab = "buy"
+local currentTab = "all"
 local orderRows = {}
 local searchText = ""
 local newOrderBtn = nil
 local createOrderBtn = nil
 
--- Tab definitions
+-- Tab definitions - simplified to single view
 local TABS = {
-    {id = "all", text = "All Orders", tooltip = "View and manage all orders"},
-    {id = "buy", text = "Buy Orders", tooltip = "View items players want to buy"},
-    {id = "sell", text = "Sell Orders", tooltip = "View items players want to sell"},
-    {id = "my", text = "My Orders", tooltip = "Manage your own orders"}
+    {id = "all", text = "All Orders", tooltip = "View and manage all orders"}
 }
 
 function UI.Initialize()
@@ -36,7 +33,7 @@ function UI.Initialize()
     Sync = addon.Sync
     Parser = addon.Parser
     
-    currentTab = Config.GetCurrentTab()
+    currentTab = "all"  -- Always use all orders view
     UI.CreateMainFrame()
     UI.CreateNewOrderDialog()
 end
@@ -104,7 +101,6 @@ function UI.CreateMainFrame()
     end)
     
     -- Create UI components
-    UI.CreateTabButtons()
     UI.CreateSearchBar()
     UI.CreateOrderList()
     UI.CreateStatusBar()
@@ -112,88 +108,14 @@ function UI.CreateMainFrame()
     frame:Hide()
 end
 
--- Create tab buttons
-function UI.CreateTabButtons()
-    local previousTab = nil
-    
-    for i, tabInfo in ipairs(TABS) do
-        local tab = CreateFrame("Button", nil, mainFrame)
-        tab:SetSize(120, 25)
-        
-        if previousTab then
-            tab:SetPoint("LEFT", previousTab, "RIGHT", 2, 0)
-        else
-            tab:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", 15, -30)
-        end
-        
-        -- Normal texture
-        tab:SetNormalTexture("Interface\\PaperDollInfoFrame\\UI-Character-Tab")
-        tab:GetNormalTexture():SetTexCoord(0.01, 0.15, 0.01, 0.7)
-        
-        -- Highlight texture
-        tab:SetHighlightTexture("Interface\\PaperDollInfoFrame\\UI-Character-Tab")
-        tab:GetHighlightTexture():SetTexCoord(0.02, 0.15, 0.02, 0.7)
-        tab:GetHighlightTexture():SetAlpha(0.4)
-        
-        -- Text
-        local text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        text:SetPoint("CENTER", 0, 2)
-        text:SetText(tabInfo.text)
-        tab.text = text
-        tab.tabId = tabInfo.id
-        
-        -- Click handler
-        tab:SetScript("OnClick", function()
-            UI.SelectTab(tabInfo.id)
-        end)
-        
-        -- Tooltip
-        tab:SetScript("OnEnter", function()
-            GameTooltip:SetOwner(tab, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(tabInfo.tooltip)
-            GameTooltip:Show()
-        end)
-        tab:SetScript("OnLeave", GameTooltip_Hide)
-        
-        previousTab = tab
-    end
-    
-    -- Update tab appearance
-    UI.UpdateTabAppearance()
-end
 
--- Update tab visual state
-function UI.UpdateTabAppearance()
-    for i, child in ipairs({mainFrame:GetChildren()}) do
-        if child.tabId then
-            if child.tabId == currentTab then
-                child:GetNormalTexture():SetVertexColor(1, 1, 1)
-                child.text:SetTextColor(1, 1, 1)
-            else
-                child:GetNormalTexture():SetVertexColor(0.6, 0.6, 0.6)
-                child.text:SetTextColor(0.8, 0.8, 0.8)
-            end
-        end
-    end
-end
-
--- Select tab
-function UI.SelectTab(tabId)
-    if currentTab ~= tabId then
-        currentTab = tabId
-        Config.SetCurrentTab(tabId)
-        UI.UpdateTabAppearance()
-        UI.CreateColumnHeaders()  -- Recreate headers for new tab
-        UI.RefreshOrders()
-    end
-end
 
 -- Create search bar
 function UI.CreateSearchBar()
     -- Search container
     local searchBar = CreateFrame("Frame", nil, mainFrame)
-    searchBar:SetPoint("TOPLEFT", 15, -60)
-    searchBar:SetPoint("TOPRIGHT", -15, -60)
+    searchBar:SetPoint("TOPLEFT", 15, -30)
+    searchBar:SetPoint("TOPRIGHT", -15, -30)
     searchBar:SetHeight(25)
     
     -- Search label
@@ -294,36 +216,23 @@ end
 function UI.CreateColumnHeaders()
     -- Clear existing headers first
     UI.ClearColumnHeaders()
-    local headers
     
-    if currentTab == "all" then
-        headers = {
-            {text = "Type", width = 50, x = 10},
-            {text = "Item", width = 160, x = 70},
-            {text = "Qty", width = 40, x = 245},
-            {text = "Price", width = 60, x = 300},
-            {text = "Buyer", width = 70, x = 375},
-            {text = "Seller", width = 70, x = 460},
-            {text = "Remaining", width = 50, x = 545},
-            {text = "Status", width = 70, x = 610},
-            {text = "Action", width = 100, x = 695}
-        }
-    else
-        headers = {
-            {text = "Type", width = 50, x = 10},
-            {text = "Item", width = 160, x = 70},
-            {text = "Qty", width = 40, x = 245},
-            {text = "Price", width = 60, x = 300},
-            {text = "Buyer", width = 70, x = 375},
-            {text = "Seller", width = 70, x = 460},
-            {text = "Remaining", width = 50, x = 545},
-            {text = "Action", width = 60, x = 610}
-        }
-    end
+    -- Always use All Orders layout (includes Status column)
+    local headers = {
+        {text = "Type", width = 50, x = 10},
+        {text = "Item", width = 160, x = 70},
+        {text = "Qty", width = 40, x = 245},
+        {text = "Price", width = 60, x = 300},
+        {text = "Buyer", width = 70, x = 375},
+        {text = "Seller", width = 70, x = 460},
+        {text = "Remaining", width = 50, x = 545},
+        {text = "Status", width = 70, x = 610},
+        {text = "Action", width = 100, x = 695}
+    }
     
     for _, header in ipairs(headers) do
         local label = mainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("TOPLEFT", header.x, -90)
+        label:SetPoint("TOPLEFT", header.x, -60)
         label:SetText("|cffFFD700" .. header.text .. "|r")
         label.isHeaderLabel = true  -- Mark for cleanup
         
@@ -508,60 +417,59 @@ function UI.CreateOrderRow(order, index)
         timeText:SetText("|cff888888" .. UI.GetTimeAgo(order.timestamp) .. "|r")
     end
     
-    -- Handle All Orders tab - show status column and action buttons for active orders
-    if currentTab == "all" then
-        -- Status column for all orders
-        local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        statusText:SetPoint("LEFT", 610, 0)  -- Position at Status column header
-        statusText:SetWidth(70)
-        statusText:SetJustifyH("LEFT")
+    -- Show status column and action buttons for all orders
+    -- Status column for all orders
+    local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    statusText:SetPoint("LEFT", 610, 0)  -- Position at Status column header
+    statusText:SetWidth(70)
+    statusText:SetJustifyH("LEFT")
+    
+    -- Check if order is expired first (overrides status)
+    if order.expiresAt and order.expiresAt < GetCurrentTime() and 
+       order.status == Database.STATUS.ACTIVE then
+        statusText:SetText("|cffffff00Expired|r")
+    elseif order.status == Database.STATUS.ACTIVE then
+        statusText:SetText("|cff00ccffActive|r")
+    -- PENDING status removed from system
+    elseif order.status == Database.STATUS.COMPLETED then
+        statusText:SetText("|cff00ff00Completed|r")
         
-        -- Check if order is expired first (overrides status)
-        if order.expiresAt and order.expiresAt < GetCurrentTime() and 
-           order.status == Database.STATUS.ACTIVE then
-            statusText:SetText("|cffffff00Expired|r")
-        elseif order.status == Database.STATUS.ACTIVE then
-            statusText:SetText("|cff00ccffActive|r")
-        -- PENDING status removed from system
-        elseif order.status == Database.STATUS.COMPLETED then
-            statusText:SetText("|cff00ff00Completed|r")
+        -- Add whisper button for completed orders
+        local playerName = UnitName("player")
+        if (order.player == playerName or order.completedBy == playerName) and order.completedBy then
+            local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+            whisperBtn:SetSize(60, 20)
+            whisperBtn:SetPoint("LEFT", 695, 0)  -- Position at action column
+            whisperBtn:SetText("Whisper")
             
-            -- Add whisper button for completed orders in All Orders tab
-            local playerName = UnitName("player")
-            if (order.player == playerName or order.completedBy == playerName) and order.completedBy then
-                local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                whisperBtn:SetSize(60, 20)
-                whisperBtn:SetPoint("LEFT", 695, 0)  -- Position at action column
-                whisperBtn:SetText("Whisper")
-                
-                whisperBtn:SetScript("OnClick", function()
-                    UI.WhisperCompletedOrder(order)
-                end)
-                
-                -- Add tooltip
-                whisperBtn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
-                    local targetName = (order.player == playerName) and order.completedBy or order.player
-                    if targetName then
-                        GameTooltip:AddLine("Will whisper: " .. targetName, 0.8, 0.8, 0.8)
-                    end
-                    GameTooltip:Show()
-                end)
-                whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
-                
-                row.whisperButton = whisperBtn
-            end
-        elseif order.status == Database.STATUS.CANCELLED then
-            statusText:SetText("|cffff0000Cancelled|r")
-        elseif order.status == Database.STATUS.CLEARED then
-            statusText:SetText("|cff888888Cleared|r")
-        -- FAILED status removed from system
-        elseif order.status == Database.STATUS.EXPIRED then
-            statusText:SetText("|cffffff00Expired|r")
-        else
-            statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
+            whisperBtn:SetScript("OnClick", function()
+                UI.WhisperCompletedOrder(order)
+            end)
+            
+            -- Add tooltip
+            whisperBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
+                local targetName = (order.player == playerName) and order.completedBy or order.player
+                if targetName then
+                    GameTooltip:AddLine("Will whisper: " .. targetName, 0.8, 0.8, 0.8)
+                end
+                GameTooltip:Show()
+            end)
+            whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
+            
+            row.whisperButton = whisperBtn
         end
+    elseif order.status == Database.STATUS.CANCELLED then
+        statusText:SetText("|cffff0000Cancelled|r")
+    elseif order.status == Database.STATUS.CLEARED then
+        statusText:SetText("|cff888888Cleared|r")
+    -- FAILED status removed from system
+    elseif order.status == Database.STATUS.EXPIRED then
+        statusText:SetText("|cffffff00Expired|r")
+    else
+        statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
+    end
         
         -- Show action buttons for active orders, completed timestamp for others
         if order.status == Database.STATUS.ACTIVE and 
@@ -626,51 +534,7 @@ function UI.CreateOrderRow(order, index)
     else
         local playerName = UnitName("player")
         
-        -- Handle My Orders tab differently - show status for completed orders
-        if currentTab == "my" and (order.status == Database.STATUS.COMPLETED or order.status == Database.STATUS.CANCELLED or order.status == Database.STATUS.CLEARED) then
-            -- Show status instead of action button for completed orders
-            local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            statusText:SetPoint("LEFT", 610, 0)
-            statusText:SetWidth(70)
-            statusText:SetJustifyH("LEFT")
-            if order.status == Database.STATUS.ACTIVE then
-                statusText:SetText("|cff00ccffPending|r")
-            elseif order.status == Database.STATUS.COMPLETED then
-                statusText:SetText("|cff00ff00Completed|r")
-                
-                -- Add whisper button for completed orders in My Orders tab (only if there's a completedBy)
-                if order.completedBy then
-                    local whisperBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-                    whisperBtn:SetSize(60, 20)
-                    whisperBtn:SetPoint("LEFT", statusText, "RIGHT", 10, 0)
-                    whisperBtn:SetText("Whisper")
-                    
-                    whisperBtn:SetScript("OnClick", function()
-                        UI.WhisperCompletedOrder(order)
-                    end)
-                    
-                    -- Add tooltip
-                    whisperBtn:SetScript("OnEnter", function(self)
-                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText("Whisper about completed order", 1, 1, 1)
-                        GameTooltip:AddLine("Will whisper: " .. order.completedBy, 0.8, 0.8, 0.8)
-                        GameTooltip:Show()
-                    end)
-                    whisperBtn:SetScript("OnLeave", GameTooltip_Hide)
-                    
-                    row.whisperButton = whisperBtn
-                end
-            elseif order.status == Database.STATUS.CANCELLED then
-                statusText:SetText("|cffff8080Cancelled|r")
-            elseif order.status == Database.STATUS.CLEARED then
-                statusText:SetText("|cff888888Cleared|r")
-            -- FAILED status removed from system
-            else
-                statusText:SetText("|cffFFD700" .. (order.status or "Unknown") .. "|r")
-            end
-            
-        else
-            -- Action button for active tabs
+        -- Action button for all orders (removing tab-specific logic)
             local actionBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             actionBtn:SetSize(80, 20)  -- Increased width for new button states
             actionBtn:SetPoint("LEFT", 580, 0)  -- Moved left to make room for G button
@@ -824,7 +688,7 @@ end
 function UI.RefreshOrders()
     if not mainFrame or not mainFrame:IsShown() or not UI.listContent then return end
     
-    -- Recreate headers to ensure correct columns for current tab
+    -- Recreate headers to ensure correct columns
     UI.CreateColumnHeaders()
     
     -- Clear existing rows
@@ -866,21 +730,10 @@ function UI.RefreshOrders()
     UI.UpdateCreateButtonStates()
 end
 
--- Get filtered orders based on current tab and search
+-- Get filtered orders based on search
 function UI.GetFilteredOrders()
-    local orders = {}
-    
-    if currentTab == "all" then
-        orders = Database.GetAllOrdersUnified()
-    elseif currentTab == "buy" then
-        orders = Database.GetOrdersByType(Database.TYPE.WTB)
-    elseif currentTab == "sell" then
-        orders = Database.GetOrdersByType(Database.TYPE.WTS)
-    elseif currentTab == "my" then
-        orders = Database.GetMyOrders()
-    else
-        orders = Database.GetAllOrders()
-    end
+    -- Always show all orders (no tab filtering)
+    local orders = Database.GetAllOrdersUnified()
     
     -- Apply search filter
     if searchText and searchText ~= "" then

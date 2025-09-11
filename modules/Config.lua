@@ -20,7 +20,7 @@ local defaultConfig = {
     -- UI settings
     windowWidth = 700,
     windowHeight = 500,
-    currentTab = "buy",
+    currentTab = "all",
     
     -- Minimap settings
     showMinimapButton = true,
