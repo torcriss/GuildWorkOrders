@@ -7,19 +7,19 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 - 🔇 **Hidden Communication** - Uses addon messages only (no guild chat spam)
 - 🔄 **Auto-Synchronization** - Real-time sync between all guild members with the addon
 - 🎯 **Smart Parsing** - Automatically detects WTB/WTS messages from guild chat
-- 📱 **Enhanced UI** - Tabbed interface with type column and improved order management
-- ⚡ **Real-time Updates** - Orders update instantly across all users with heartbeat system
+- 📱 **Simplified UI** - Single comprehensive interface showing all orders with enhanced layout
+- 📢 **Guild Chat G Button** - One-click guild announcements for ACTIVE/EXPIRED orders
+- ⚡ **Real-time Updates** - Orders update instantly across all users with 3-second heartbeat system
 - 🛡️ **Six-State Lifecycle** - Robust order management with proper state transitions
-- 🔐 **Admin Clear System** - Password-protected guild-wide order clearing with full tracking
+- 🔐 **Heartbeat Admin Clear** - Guild-wide order clearing via heartbeat relay system
 - ⏰ **12-Hour Order Lifecycle** - Orders automatically expire after 12 hours for realistic trading
-- 📢 **Optional Announcements** - Can announce new orders to guild chat if desired
 - 🔧 **Automatic Cleanup** - Smart cleanup system prevents database bloat
 - 📊 **Status Indicators** - Real-time display of your orders and database usage
 - 💬 **Whisper Integration** - One-click whisper button for completed orders between buyers and sellers
 
 ## Installation
 
-1. Download the latest release
+1. Download the latest release from GitHub
 2. Extract to your `World of Warcraft\_classic_era_\Interface\AddOns\` directory
 3. Enable "GuildWorkOrders" in the AddOns menu
 4. Reload your UI or restart WoW
@@ -27,11 +27,13 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 ## Usage
 
 ### Main Interface
-- `/gwo` or `/workorders` - Open the main UI
-- Browse through tabs: **Buy Orders** | **Sell Orders** | **My Orders** | **History**
+- `/gwo` or `/workorders` - Open the simplified UI
+- Single comprehensive view showing all orders with Type, Item, Player, Quantity, Price, Time, Status, Action columns
 - Use the search box to find specific items
 - Click "New Order" to create WTB/WTS orders
-- Click "Whisper" to contact players about their orders
+- Click "G" button to announce ACTIVE/EXPIRED orders to guild chat
+- Click "Whisper" to contact players about their completed orders
+- Action buttons for canceling your orders or fulfilling others' orders
 
 ### Quick Commands
 ```
@@ -50,31 +52,25 @@ A comprehensive guild-wide work order management system for World of Warcraft Cl
 /gwo fulfill 2                         # Mark your order #2 as completed
 /gwo sync                              # Force sync with guild
 /gwo help                              # Show all commands
+/gwo debug                             # Toggle debug mode
+/gwo config                            # Open configuration
 ```
 
 ### Admin Management
-Access the password-protected admin clear system:
+The admin clear system has been enhanced to use the heartbeat relay network:
 
-**Full Clear (All Orders):**
+**Admin Clear (All Orders):**
 - **Admin Button** - Red "Admin" button in the UI status bar
-- **Password**: `0000` (hashed and secured)
-- **Two-Step Process**: Password entry + final confirmation
-- **Global Effect**: Clears ALL orders for ALL guild members
-- **Full Tracking**: Shows "Last clear: X ago by PlayerName" in status bar
-- **Offline Protection**: Users who missed the clear get updated when they return
+- **Heartbeat-Based** - Uses the heartbeat relay system for reliable propagation
+- **Network Resilient** - Orders marked as CLEARED propagate even if admin goes offline
+- **Global Effect** - All orders transition to CLEARED status across all guild members
+- **Full Tracking** - Shows "Last clear: X ago by PlayerName" in status bar
 
-**Single Order Clear:**
-- **Individual "X" Buttons** - Red "X" button next to each order on all tabs
-- **Same Password**: Uses `0000` password with same security system
-- **Selective Clearing**: Remove specific problematic orders without affecting others
-- **Universal Access**: Available on Buy Orders, Sell Orders, My Orders, and History tabs
-- **Smart Positioning**: Buttons positioned to avoid overlapping columns
-
-**Security Features**:
-- Failed attempt lockout (30 seconds after 3 tries)
-- Password authentication for all admin actions
-- Multiple confirmation dialogs with warnings
-- Real-time status updates across all guild members
+**Key Benefits:**
+- No immediate broadcast flooding
+- Leverages existing heartbeat infrastructure
+- More reliable than previous immediate broadcast system
+- Orders propagate through established 3-second heartbeat cycle
 
 ## How It Works
 
@@ -82,10 +78,10 @@ Access the password-protected admin clear system:
 GuildWorkOrders uses a sophisticated 6-state system for order management:
 
 1. **ACTIVE** - Newly created orders, visible to all players
-2. **EXPIRED** - Orders that exceeded the 1-minute time limit
+2. **EXPIRED** - Orders that exceeded the 12-hour time limit
 3. **CANCELLED** - Orders manually cancelled by the player
 4. **COMPLETED** - Orders marked as fulfilled by the player  
-5. **CLEARED** - Orders removed by admin action
+5. **CLEARED** - Orders removed by admin action via heartbeat system
 6. **PURGED** - Internal cleanup state before permanent deletion
 
 **State Transitions:**
@@ -97,11 +93,11 @@ GuildWorkOrders uses a sophisticated 6-state system for order management:
 ### Synchronization
 - Orders are synchronized between guild members using hidden addon messages
 - No guild chat spam - all communication is invisible to non-addon users
-- **30-Second Heartbeat System** - Continuous rotating broadcasts ensure all users stay synchronized
+- **3-Second Heartbeat System** - Continuous rotating broadcasts ensure all users stay synchronized
 - **Instant New Order Sync** - New orders broadcast immediately to all users
 - **Advanced State Management** - Proper handling of all 6 order states with timestamps
 - **Network Reliability** - Two-stage deletion with PURGED state prevents data loss
-- **Rate Limiting** - Prevents flooding (max 5 messages per second with intelligent batching)
+- **Rate Limiting** - Prevents flooding with intelligent batching and timing
 
 ### Order Parsing
 The addon automatically detects WTB/WTS patterns in guild chat:
@@ -111,12 +107,12 @@ The addon automatically detects WTB/WTS patterns in guild chat:
 - Only processes messages containing actual items
 
 ### Order Management
-- **Rapid Turnover** - 1-minute order lifecycle for active trading
+- **Realistic Timing** - 12-hour order lifecycle for production trading
 - **Automatic Cleanup** - Time-based cleanup prevents database bloat
 - **Order Actions** - Players can cancel or mark their own orders as completed
 - **Full History** - Complete tracking of completed orders with status details
 - **Advanced Search** - Search and filter functionality with real-time updates
-- **Admin Clear System** - Password-protected clearing with timestamp tracking
+- **Heartbeat Admin Clear** - Network-resilient clearing via heartbeat relay system
 
 ## Configuration
 
@@ -126,7 +122,8 @@ Access configuration via `/gwo config` or through the UI:
 - **autoSync** - Auto-sync on login (default: true)
 - **soundAlert** - Play sound for new orders (default: true)
 - **debugMode** - Enable debug logging (default: false)
-- **orderExpiry** - Order expiry time in seconds (default: 60 = 1 minute)
+- **orderExpiry** - Order expiry time in seconds (default: 43200 = 12 hours)
+- **syncTimeout** - Sync timeout in seconds (default: 30)
 
 ## Requirements
 
@@ -168,7 +165,7 @@ GuildWorkOrders/
     ├── Config.lua               # Configuration management
     ├── Database.lua             # Six-state order management system
     ├── Parser.lua               # WTB/WTS message parsing
-    ├── Sync.lua                 # Advanced guild synchronization protocol
+    ├── Sync.lua                 # 3-second heartbeat synchronization protocol
     ├── UI.lua                   # Enhanced user interface with status indicators
     ├── Commands.lua             # Slash command system
     └── Minimap.lua              # Minimap integration
@@ -191,7 +188,6 @@ Use the included `deploy.sh` script for development deployment:
 ## Support
 
 - Report issues on GitHub
-- Join our Discord for community support
 - Check the wiki for advanced usage tips
 
 ## License
@@ -200,14 +196,28 @@ MIT License - see LICENSE file for details
 
 ---
 
-**GuildWorkOrders v4.5.0** - Making guild trading easier, one order at a time! 🛒
+**GuildWorkOrders v4.5.0** - Making guild trading easier with enhanced UI and guild chat integration! 🛒
 
 ## Recent Updates (v4.5.0)
+
+### 📢 New Guild Chat "G" Button
+- **Quick Announce** - New "G" button in Action column for ACTIVE and EXPIRED orders
+- **Smart Positioning** - 25x20 button positioned next to action buttons
+- **Message Format** - Uses same WTB/WTS format as "Also announce guild chat" feature
+- **Tooltip Support** - Helpful tooltip explaining functionality
+- **Status Aware** - Only appears for orders that can be announced
+
+### 🎨 Simplified Interface  
+- **Single View** - Removed Buy Orders, Sell Orders, and My Orders tabs
+- **Unified Display** - All orders now shown in one comprehensive table
+- **Better Layout** - Optimized positioning with Type, Item, Player, Quantity, Price, Time, Status, Action columns
+- **Streamlined Navigation** - No more tab switching required
+- **Cleaner Experience** - All functionality accessible from single interface
 
 ### 🛡️ Enhanced Admin Clear System
 - **Heartbeat-Based Admin Clear** - Admin clear now uses the heartbeat relay system instead of immediate broadcast
 - **Network Resilient** - Orders marked as CLEARED propagate through heartbeat system even when admin goes offline
-- **Better Synchronization** - All players receive cleared orders through the established heartbeat relay network
+- **Better Synchronization** - All players receive cleared orders through the established 3-second heartbeat relay network
 - **Removed Legacy Broadcast** - Eliminated immediate CLEAR_ALL message type for cleaner architecture
 
 ### 🔧 Improved Conflict Resolution
@@ -217,20 +227,27 @@ MIT License - see LICENSE file for details
 - **Cleaner Message Handling** - Removed unused CLEAR_ALL message handlers and functions
 
 ### 🐛 Bug Fixes
-- **Fixed Syntax Error** - Resolved Lua syntax error in admin clear confirmation dialog
-- **Cleaned Up Code** - Removed obsolete BroadcastClearAll and HandleClearAll functions
+- **Fixed UI Syntax Error** - Resolved Lua syntax error from tab removal process
+- **Cleaned Up Code** - Removed obsolete tab functions and duplicate code blocks
 - **Improved Status Transitions** - Better handling of status changes through heartbeat system
+- **Fixed Orphaned Code** - Removed duplicate action button logic that caused syntax errors
 
-## Previous Updates (v4.2.0)
+## Previous Updates (v4.4.0)
+
+### ⚡ Enhanced Synchronization
+- **3-Second Heartbeat System** - Optimized network traffic with faster 3-second intervals for better responsiveness
+- **Improved Conflict Resolution** - Better handling of version conflicts with status priority system
+- **Enhanced Debug Logging** - Comprehensive debug messages for troubleshooting sync issues
+
+## Previous Updates (v4.3.0)
 
 ### ⚙️ Production-Ready Configuration
-- **30-Second Heartbeat System** - Reduced network traffic from 3-second to 30-second intervals
-- **12-Hour Order Lifecycle** - Orders now expire after 12 hours instead of 1 minute for realistic trading
-- **Extended Cleanup Cycles** - Non-active orders transition to PURGED after 18 hours (was 2 minutes)
-- **24-Hour Broadcast Window** - PURGED orders broadcast for 24 hours before deletion (was 4 minutes)
-- **Optimized for Guild Use** - All timing settings adjusted from rapid testing to production-ready values
+- **12-Hour Order Lifecycle** - Orders now expire after 12 hours for realistic trading
+- **Extended Cleanup Cycles** - Non-active orders transition to PURGED after 18 hours
+- **24-Hour Broadcast Window** - PURGED orders broadcast for 24 hours before deletion
+- **Optimized for Guild Use** - All timing settings adjusted for production guild environments
 
-## Previous Updates (v4.1.0)
+## Previous Updates (v4.2.0)
 
 ### 💬 New Whisper Integration
 - **Whisper Button for Completed Orders** - One-click whisper button appears for completed orders
@@ -239,7 +256,7 @@ MIT License - see LICENSE file for details
 - **Graceful Fallbacks** - Handles missing quantity or price information elegantly
 - **All Tabs Support** - Whisper button available in All Orders, My Orders, and filtered tabs
 
-## Previous Updates (v4.0.1)
+## Previous Updates (v4.1.0)
 
 ### 🐛 Critical Bug Fixes
 - **Fixed Order Expiration for Offline Creators** - Non-creators can now expire orders from offline players
@@ -261,7 +278,7 @@ MIT License - see LICENSE file for details
 - **ACTIVE → EXPIRED/CANCELLED/COMPLETED/CLEARED → PURGED → Deleted** - Proper state transitions
 - **12-Hour Order Lifecycle** - Orders expire after 12 hours for realistic trading
 - **Two-Stage Deletion** - PURGED state ensures network-wide order removal reliability
-- **Heartbeat-Only Synchronization** - Continuous 30-second rotating broadcasts eliminate sync gaps
+- **Heartbeat-Only Synchronization** - Continuous rotating broadcasts eliminate sync gaps
 
 ### ⚡ Enhanced Network Protocol  
 - **19-Field Heartbeat Messages** - Complete order state with all timestamps
