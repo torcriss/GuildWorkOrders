@@ -504,9 +504,11 @@ function UI.CreateOrderRow(order, index)
         end
         
         -- Add G button for ACTIVE or EXPIRED orders (including those that are expired but not yet marked as EXPIRED)
+        -- Only show for the player's own orders
         local isExpired = order.expiresAt and order.expiresAt < GetCurrentTime()
-        if order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.EXPIRED or 
-           (order.status == Database.STATUS.ACTIVE and isExpired) then
+        local currentPlayer = UnitName("player")
+        if (order.status == Database.STATUS.ACTIVE or order.status == Database.STATUS.EXPIRED or 
+           (order.status == Database.STATUS.ACTIVE and isExpired)) and order.player == currentPlayer then
             local guildBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             guildBtn:SetSize(25, 20)
             guildBtn:SetPoint("LEFT", 750, 0)  -- Positioned to the right of action button
